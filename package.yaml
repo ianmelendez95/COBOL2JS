@@ -35,6 +35,8 @@ ghc-options:
 
 library:
   source-dirs: src
+  dependencies:
+  - text
 
 executables:
   COBOL2JS-exe:
