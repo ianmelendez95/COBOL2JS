@@ -37,6 +37,7 @@ library:
   source-dirs: src
   dependencies:
   - text
+  - megaparsec
 
 executables:
   COBOL2JS-exe:
