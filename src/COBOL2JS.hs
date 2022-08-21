@@ -10,7 +10,7 @@ cobol2jsFile cobolSrc jsDest = do
   T.writeFile jsDest (JS.scriptToText jsScript)
 
 cobol2js :: COBOL.Prog -> JS.Script
-cobol2js (COBOL.Prog _ (COBOL.Proc sts)) = JS.Script (map statement2js sts)
+cobol2js (COBOL.Prog _ _ sts) = JS.Script (map statement2js sts)
 
 statement2js :: COBOL.Statement -> JS.Statement
 statement2js (COBOL.Display txt) = JS.Log txt

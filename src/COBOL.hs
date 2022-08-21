@@ -15,15 +15,16 @@ import qualified Text.Megaparsec.Char.Lexer as L
 
 type Parser = Parsec Void T.Text
 
-data Prog = Prog Ident Proc deriving Show
-
-newtype Ident = Ident 
-  { identProgId :: T.Text
-  } deriving Show
-
-newtype Proc = Proc [Statement] deriving Show
+data Prog = Prog IdentDiv DataDiv ProcDiv deriving Show
 
 newtype Statement = Display T.Text deriving Show
+
+type IdentDiv = T.Text
+type DataDiv = [Var]
+type ProcDiv = [Statement]
+
+data Var = Var T.Text VType Int deriving Show
+data VType = AlphaNum | Num deriving Show
 
 data CToken = Word T.Text
             | StrLit T.Text
@@ -40,27 +41,38 @@ readFile file_path = do
 
 prog :: Parser Prog
 prog = do 
-  _ <- space -- skip initial whitespace
-  Prog <$> identification  -- identification
-       <*> procedure   -- rest of tokens
+  Prog <$> (space >> identification)  -- identification
+       <*> (dataDivision <|> pure []) -- optional data
+       <*> procedureDivision          -- procedure
 
-identification :: Parser Ident
+identification :: Parser IdentDiv
 identification = do
-  _ <- symbol "IDENTIFICATION"
-  _ <- symbol "DIVISION"
-  _ <- period
-  _ <- symbol "PROGRAM-ID"
-  _ <- period
-  Ident <$> word <* period
+  _ <- symbol "IDENTIFICATION" >> symbol "DIVISION" >> period
+  _ <- symbol "PROGRAM-ID" >> period
+  word <* period
 
-procedure :: Parser Proc
-procedure = do
-  _ <- symbol "PROCEDURE"
-  _ <- symbol "DIVISION"
-  _ <- period
-  statements <- many statement
-  _ <- symbol "GOBACK" >> period
-  pure (Proc statements)
+dataDivision :: Parser DataDiv
+dataDivision = do 
+  _ <- symbol "DATA" >> symbol "DIVISION" >> period
+  _ <- symbol "WORKING-STORAGE" >> symbol "SECTION" >> period
+  many variable
+
+variable :: Parser Var
+variable =
+  Var <$> (symbol "77" >> word)
+      <*> (symbol "PIC" >> variableType)
+      <*> (between (char '(') (char ')') L.decimal <* period)
+
+variableType :: Parser VType
+variableType = choice 
+  [ AlphaNum <$ char 'X'
+  , Num <$ char '9'
+  ]
+
+procedureDivision :: Parser ProcDiv
+procedureDivision = do
+  _ <- symbol "PROCEDURE" >> symbol "DIVISION" >> period
+  many statement <* (symbol "GOBACK" >> period)
 
 statement :: Parser Statement
 statement = choice 
@@ -95,7 +107,7 @@ strLit' :: Parser String
 strLit' = char '"' >> manyTill L.charLiteral (char '"')
 
 symbol :: T.Text -> Parser T.Text
-symbol = lexeme . L.symbol space
+symbol = L.symbol space
 
 lexeme :: Parser a -> Parser a
 lexeme = L.lexeme space
