@@ -26,6 +26,8 @@ source-repository head
 library
   exposed-modules:
       COBOL
+      COBOL2JS
+      JS
       Lib
   other-modules:
       Paths_COBOL2JS
