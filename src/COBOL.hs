@@ -27,7 +27,7 @@ readFile file_path = do
     Right res -> pure res
 
 prog :: Parser Prog
-prog = undefined
+prog = Prog <$> (space >> some (lexeme ctoken))
 
 ctoken :: Parser CToken
 ctoken = choice 
@@ -37,10 +37,10 @@ ctoken = choice
   ]
 
 word :: Parser CToken
-word = Word <$> takeWhile1P (Just "Identifier Char") validIdentifierChar
+word = Word <$> takeWhile1P (Just "<identifier-char>") validIdentifierChar
   where 
     validIdentifierChar :: Char -> Bool
-    validIdentifierChar c = isDigit c || c == '-'
+    validIdentifierChar c = isAlphaNum c || c == '-'
 
 period :: Parser CToken
 period = Period <$ char '.'
