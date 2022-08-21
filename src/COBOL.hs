@@ -15,11 +15,15 @@ import qualified Text.Megaparsec.Char.Lexer as L
 
 type Parser = Parsec Void T.Text
 
-data Prog = Prog Ident [CToken] deriving Show
+data Prog = Prog Ident Proc deriving Show
 
-data Ident = Ident 
+newtype Ident = Ident 
   { identProgId :: T.Text
   } deriving Show
+
+newtype Proc = Proc [Statement] deriving Show
+
+newtype Statement = Display T.Text deriving Show
 
 data CToken = Word T.Text
             | StrLit T.Text
@@ -37,17 +41,36 @@ readFile file_path = do
 prog :: Parser Prog
 prog = do 
   _ <- space -- skip initial whitespace
-  Prog <$> lexeme identification  -- identification
-       <*> some (lexeme ctoken)   -- rest of tokens
+  Prog <$> identification  -- identification
+       <*> procedure   -- rest of tokens
 
 identification :: Parser Ident
 identification = do
-  _ <- lexeme (symbol "IDENTIFICATION")
-  _ <- lexeme (symbol "DIVISION")
-  _ <- lexeme period
-  _ <- lexeme (symbol "PROGRAM-ID")
-  _ <- lexeme period
-  Ident <$> lexeme word <* period
+  _ <- symbol "IDENTIFICATION"
+  _ <- symbol "DIVISION"
+  _ <- period
+  _ <- symbol "PROGRAM-ID"
+  _ <- period
+  Ident <$> word <* period
+
+procedure :: Parser Proc
+procedure = do
+  _ <- symbol "PROCEDURE"
+  _ <- symbol "DIVISION"
+  _ <- period
+  statements <- many statement
+  _ <- symbol "GOBACK" >> period
+  pure (Proc statements)
+
+statement :: Parser Statement
+statement = choice 
+  [ displayStatement
+  ]
+
+displayStatement :: Parser Statement
+displayStatement = do 
+  _ <- symbol "DISPLAY"
+  Display <$> (strLit <* period)
 
 ctoken :: Parser CToken
 ctoken = choice 
@@ -57,26 +80,26 @@ ctoken = choice
   ]
 
 word :: Parser T.Text
-word = takeWhile1P (Just "<identifier-char>") validIdentifierChar
+word = lexeme $ takeWhile1P (Just "<identifier-char>") validIdentifierChar
   where 
     validIdentifierChar :: Char -> Bool
     validIdentifierChar c = isAlphaNum c || c == '-'
 
 period :: Parser ()
-period = void $ char '.'
+period = lexeme . void $ char '.'
 
 strLit :: Parser T.Text
-strLit = T.pack <$> strLit'
+strLit = T.pack <$> lexeme strLit'
 
 strLit' :: Parser String
 strLit' = char '"' >> manyTill L.charLiteral (char '"')
 
-space :: Parser ()
-space = L.space space1 empty empty
+symbol :: T.Text -> Parser T.Text
+symbol = lexeme . L.symbol space
 
 lexeme :: Parser a -> Parser a
 lexeme = L.lexeme space
 
-symbol :: T.Text -> Parser T.Text
-symbol = L.symbol space
+space :: Parser ()
+space = L.space space1 empty empty
 
