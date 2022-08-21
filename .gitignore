@@ -23,5 +23,5 @@ cabal.project.local~
 .ghc.environment.*
 
 # COBOL Binaries
-/COBOL
+/COBOL/*
 !/COBOL/*.CBL
