@@ -1,5 +1,9 @@
+{-# LANGUAGE OverloadedStrings #-}
+
+
 module COBOL where 
 
+import Control.Monad (void)
 import Data.Void
 import Data.Char
 import qualified Data.Text as T
@@ -11,7 +15,11 @@ import qualified Text.Megaparsec.Char.Lexer as L
 
 type Parser = Parsec Void T.Text
 
-newtype Prog = Prog [CToken] deriving Show
+data Prog = Prog Ident [CToken] deriving Show
+
+data Ident = Ident 
+  { identProgId :: T.Text
+  } deriving Show
 
 data CToken = Word T.Text
             | StrLit T.Text
@@ -27,26 +35,38 @@ readFile file_path = do
     Right res -> pure res
 
 prog :: Parser Prog
-prog = Prog <$> (space >> some (lexeme ctoken))
+prog = do 
+  _ <- space -- skip initial whitespace
+  Prog <$> lexeme identification  -- identification
+       <*> some (lexeme ctoken)   -- rest of tokens
+
+identification :: Parser Ident
+identification = do
+  _ <- lexeme (symbol "IDENTIFICATION")
+  _ <- lexeme (symbol "DIVISION")
+  _ <- lexeme period
+  _ <- lexeme (symbol "PROGRAM-ID")
+  _ <- lexeme period
+  Ident <$> lexeme word <* period
 
 ctoken :: Parser CToken
 ctoken = choice 
-  [ period
-  , strLit
-  , word
+  [ Period <$ period
+  , StrLit <$> strLit
+  , Word <$> word
   ]
 
-word :: Parser CToken
-word = Word <$> takeWhile1P (Just "<identifier-char>") validIdentifierChar
+word :: Parser T.Text
+word = takeWhile1P (Just "<identifier-char>") validIdentifierChar
   where 
     validIdentifierChar :: Char -> Bool
     validIdentifierChar c = isAlphaNum c || c == '-'
 
-period :: Parser CToken
-period = Period <$ char '.'
+period :: Parser ()
+period = void $ char '.'
 
-strLit :: Parser CToken
-strLit = StrLit . T.pack <$> strLit'
+strLit :: Parser T.Text
+strLit = T.pack <$> strLit'
 
 strLit' :: Parser String
 strLit' = char '"' >> manyTill L.charLiteral (char '"')
