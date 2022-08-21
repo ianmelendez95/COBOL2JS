@@ -17,7 +17,10 @@ type Parser = Parsec Void T.Text
 
 data Prog = Prog IdentDiv DataDiv ProcDiv deriving Show
 
-newtype Statement = Display T.Text deriving Show
+data Statement = Display T.Text
+               | MoveTxt T.Text T.Text
+               | MoveInt Int T.Text
+               deriving Show
 
 type IdentDiv = T.Text
 type DataDiv = [Var]
@@ -77,6 +80,7 @@ procedureDivision = do
 statement :: Parser Statement
 statement = choice 
   [ displayStatement
+  , moveStatement
   ]
 
 displayStatement :: Parser Statement
@@ -84,12 +88,13 @@ displayStatement = do
   _ <- symbol "DISPLAY"
   Display <$> (strLit <* period)
 
-ctoken :: Parser CToken
-ctoken = choice 
-  [ Period <$ period
-  , StrLit <$> strLit
-  , Word <$> word
-  ]
+moveStatement :: Parser Statement 
+moveStatement = do 
+  _ <- symbol "MOVE"
+  val <- (Left <$> strLit) <|> (Right <$> decimal)
+  _ <- symbol "TO"
+  var <- word <* period
+  pure $ either (`MoveTxt` var) (`MoveInt` var) val
 
 word :: Parser T.Text
 word = lexeme $ takeWhile1P (Just "<identifier-char>") validIdentifierChar
@@ -99,6 +104,9 @@ word = lexeme $ takeWhile1P (Just "<identifier-char>") validIdentifierChar
 
 period :: Parser ()
 period = lexeme . void $ char '.'
+
+decimal :: Num a => Parser a
+decimal = lexeme L.decimal
 
 strLit :: Parser T.Text
 strLit = T.pack <$> lexeme strLit'
