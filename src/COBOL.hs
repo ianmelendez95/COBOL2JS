@@ -20,7 +20,12 @@ data Prog = Prog IdentDiv DataDiv ProcDiv deriving Show
 data Statement = Display T.Text
                | MoveTxt T.Text T.Text
                | MoveInt Int T.Text
+               | Compute T.Text T.Text T.Text
                deriving Show
+              
+-- data Arith = AVar T.Text
+--            | Mult Arith Arith
+--            deriving Show
 
 type IdentDiv = T.Text
 type DataDiv = [Var]
@@ -81,6 +86,7 @@ statement :: Parser Statement
 statement = choice 
   [ displayStatement
   , moveStatement
+  , computeStatement
   ]
 
 displayStatement :: Parser Statement
@@ -95,6 +101,15 @@ moveStatement = do
   _ <- symbol "TO"
   var <- word <* period
   pure $ either (`MoveTxt` var) (`MoveInt` var) val
+
+computeStatement :: Parser Statement
+computeStatement = 
+  Compute <$> (symbol "COMPUTE" >> word)
+          <*> (symbol "=" >> word)
+          <*> (symbol "*" >> word <* period)
+
+-- arithmeticExpression :: Parser Arith
+-- arithmeticExpression = undefined
 
 word :: Parser T.Text
 word = lexeme $ takeWhile1P (Just "<identifier-char>") validIdentifierChar
