@@ -1,6 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-
 module COBOL where 
 
 import Control.Monad (void)
@@ -17,15 +16,14 @@ type Parser = Parsec Void T.Text
 
 data Prog = Prog IdentDiv DataDiv ProcDiv deriving Show
 
-data Statement = Display T.Text
-               | MoveTxt T.Text T.Text
-               | MoveInt Int T.Text
-               | Compute T.Text T.Text T.Text
+data Statement = Display [Value]
+               | Move Value T.Text
+               | Compute T.Text Arith
                deriving Show
               
--- data Arith = AVar T.Text
---            | Mult Arith Arith
---            deriving Show
+data Arith = AVal Value
+           | Mult Arith Arith
+           deriving Show
 
 type IdentDiv = T.Text
 type DataDiv = [Var]
@@ -34,10 +32,10 @@ type ProcDiv = [Statement]
 data Var = Var T.Text VType Int deriving Show
 data VType = AlphaNum | Num deriving Show
 
-data CToken = Word T.Text
-            | StrLit T.Text
-            | Period
-            deriving Show
+data Value = VarVal T.Text
+           | NumVal Int
+           | StrVal T.Text
+           deriving Show
 
 readFile :: FilePath -> IO Prog
 readFile file_path = do 
@@ -90,30 +88,35 @@ statement = choice
   ]
 
 displayStatement :: Parser Statement
-displayStatement = do 
-  _ <- symbol "DISPLAY"
-  Display <$> (strLit <* period)
+displayStatement = Display <$> (symbol "DISPLAY" >> some value <* period)
 
 moveStatement :: Parser Statement 
-moveStatement = do 
-  _ <- symbol "MOVE"
-  val <- (Left <$> strLit) <|> (Right <$> decimal)
-  _ <- symbol "TO"
-  var <- word <* period
-  pure $ either (`MoveTxt` var) (`MoveInt` var) val
+moveStatement =
+  Move <$> (symbol "MOVE" >> value)
+       <*> (symbol "TO" >> word <* period)
 
 computeStatement :: Parser Statement
 computeStatement = 
   Compute <$> (symbol "COMPUTE" >> word)
-          <*> (symbol "=" >> word)
-          <*> (symbol "*" >> word <* period)
+          <*> (symbol "=" >> arithmeticExpression)
 
--- arithmeticExpression :: Parser Arith
--- arithmeticExpression = undefined
+arithmeticExpression :: Parser Arith
+arithmeticExpression = 
+  Mult <$> (AVal <$> value)
+       <*> (symbol "*" >> (AVal <$> value) <* period)
+
+value :: Parser Value
+value = choice [StrVal <$> strLit, NumVal <$> decimal, VarVal <$> word]
 
 word :: Parser T.Text
-word = lexeme $ takeWhile1P (Just "<identifier-char>") validIdentifierChar
+word = lexeme $ T.cons <$> first <*> rest
   where 
+    first :: Parser Char
+    first = satisfy isAlpha
+
+    rest :: Parser T.Text
+    rest = takeWhile1P (Just "<identifier-char>") validIdentifierChar
+
     validIdentifierChar :: Char -> Bool
     validIdentifierChar c = isAlphaNum c || c == '-'
 
