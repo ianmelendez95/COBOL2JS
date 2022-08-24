@@ -16,8 +16,8 @@
            MOVE 23 TO RATE.
            COMPUTE GROSS-PAY = HOURS * RATE.
            DISPLAY "Name: " WHO.
-           DISPLAY "Location: " WHERE
-           DISPLAY "Reason: " WHY
+           DISPLAY "Location: " WHERE.
+           DISPLAY "Reason: " WHY.
            DISPLAY "Hours Worked: " HOURS.
            DISPLAY "Hourly Rate: " RATE.
            DISPLAY "Gross Pay: " GROSS-PAY.
