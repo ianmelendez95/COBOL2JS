@@ -38,6 +38,7 @@ library:
   dependencies:
   - text
   - megaparsec
+  - containers
 
 executables:
   COBOL2JS-exe:
