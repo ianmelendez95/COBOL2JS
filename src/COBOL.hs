@@ -5,12 +5,14 @@ module COBOL where
 import Control.Monad (void)
 import Data.Void
 import Data.Char
+import Data.Maybe
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
 
 import Text.Megaparsec
 import Text.Megaparsec.Char hiding (space)
 import qualified Text.Megaparsec.Char.Lexer as L
+import Text.Megaparsec.Byte.Lexer (skipLineComment)
 
 type Parser = Parsec Void T.Text
 
@@ -22,8 +24,20 @@ data Statement = Display [Value]
                deriving Show
               
 data Arith = AVal Value
-           | Mult Arith Arith
+           | ABin1 ABin
+           | ABin2 ABin AOp ABin 
            deriving Show
+
+data ABin = ABin AVal AOp AVal 
+          deriving Show
+
+data AOp = Mult 
+         | Add
+         deriving Show
+
+data AVal = AVar T.Text
+          | ANum Int
+          deriving Show
 
 type IdentDiv = T.Text
 type DataDiv = [Var]
@@ -36,6 +50,10 @@ data Value = VarVal T.Text
            | NumVal Int
            | StrVal T.Text
            deriving Show
+
+arithValToValue :: AVal -> Value
+arithValToValue (AVar v) = VarVal v
+arithValToValue (ANum n) = NumVal n
 
 readFile :: FilePath -> IO Prog
 readFile file_path = do 
@@ -85,25 +103,52 @@ statement = choice
   [ displayStatement
   , moveStatement
   , computeStatement
-  ]
+  ] <* period
 
 displayStatement :: Parser Statement
-displayStatement = Display <$> (symbol "DISPLAY" >> some value <* period)
+displayStatement = Display <$> (symbol "DISPLAY" >> some value)
 
 moveStatement :: Parser Statement 
 moveStatement =
   Move <$> (symbol "MOVE" >> value)
-       <*> (symbol "TO" >> word <* period)
+       <*> (symbol "TO" >> word)
 
 computeStatement :: Parser Statement
 computeStatement = 
   Compute <$> (symbol "COMPUTE" >> word)
           <*> (symbol "=" >> arithmeticExpression)
 
+-- https://www.ibm.com/docs/en/cobol-zos/6.4?topic=structure-arithmetic-expressions
 arithmeticExpression :: Parser Arith
-arithmeticExpression = 
-  Mult <$> (AVal <$> value)
-       <*> (symbol "*" >> (AVal <$> value) <* period)
+arithmeticExpression = choice
+  [ between (symbol "(") (symbol ")") arithBinMaybe2
+  , arithBinMaybe2
+  ]
+  where 
+    arithBinMaybe2 :: Parser Arith
+    arithBinMaybe2 = do 
+      a1 <- arithBin
+      m_a2 <- optional (ABin2 a1 <$> arithOp <*> arithBin)
+      pure $ fromMaybe (ABin1 a1) m_a2
+    
+    arithBin :: Parser ABin
+    arithBin = 
+      ABin <$> arithVal 
+           <*> arithOp
+           <*> arithVal
+
+    arithVal :: Parser AVal
+    arithVal = choice 
+      [ ANum 0 <$  symbol "ZERO" 
+      , ANum   <$> decimal
+      , AVar   <$> word
+      ]
+    
+    arithOp :: Parser AOp
+    arithOp = choice 
+      [ Mult <$ symbol "*"
+      , Add  <$ symbol "+"
+      ]
 
 value :: Parser Value
 value = choice [StrVal <$> strLit, NumVal <$> decimal, VarVal <$> word]
@@ -139,5 +184,5 @@ lexeme :: Parser a -> Parser a
 lexeme = L.lexeme space
 
 space :: Parser ()
-space = L.space space1 empty empty
+space = L.space space1 (L.skipLineComment "*") (L.skipBlockComment "/*" "*/")
 

@@ -25,9 +25,21 @@ c2jVal (COBOL.VarVal v) = JS.VarVal (c2jVar v)
 c2jVal (COBOL.NumVal v) = JS.NumVal v
 c2jVal (COBOL.StrVal v) = JS.StrVal v
 
+c2jArithVal :: COBOL.AVal -> JS.Value
+c2jArithVal = c2jVal . COBOL.arithValToValue
+
 c2jVar :: T.Text -> T.Text
 c2jVar = T.replace "-" "_" . T.toLower
 
 c2jArith :: COBOL.Arith -> JS.Arith
 c2jArith (COBOL.AVal v) = JS.AVal (c2jVal v)
-c2jArith (COBOL.Mult v1 v2) = JS.Mult (c2jArith v1) (c2jArith v2)
+c2jArith (COBOL.ABin1 a) = c2jBinaryArith a
+c2jArith (COBOL.ABin2 a1 op a2) = JS.Arith (c2jBinaryArith a1) (c2jOp op) (c2jBinaryArith a2)
+
+c2jBinaryArith :: COBOL.ABin -> JS.Arith
+c2jBinaryArith (COBOL.ABin v1 op v2) = 
+  JS.Arith (JS.AVal $ c2jArithVal v1) (c2jOp op) (JS.AVal $ c2jArithVal v2)
+       
+c2jOp :: COBOL.AOp -> JS.AOp
+c2jOp COBOL.Mult = JS.Mult
+c2jOp COBOL.Add = JS.Add
