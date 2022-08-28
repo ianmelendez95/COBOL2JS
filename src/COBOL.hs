@@ -128,8 +128,7 @@ arithmeticExpression = choice
     arithBinMaybe2 :: Parser Arith
     arithBinMaybe2 = do 
       a1 <- arithBin
-      m_a2 <- optional (ABin2 a1 <$> arithOp <*> arithBin)
-      pure $ fromMaybe (ABin1 a1) m_a2
+      (ABin2 a1 <$> arithOp <*> arithBin) <|> pure (ABin1 a1)
     
     arithBin :: Parser ABin
     arithBin = 
