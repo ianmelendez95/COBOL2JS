@@ -79,13 +79,13 @@ dataDivision :: Parser DataDiv
 dataDivision = do 
   _ <- symbol "DATA" >> symbol "DIVISION" >> period
   _ <- symbol "WORKING-STORAGE" >> symbol "SECTION" >> period
-  many variable
+  many (variable <* period)
 
 variable :: Parser Var
 variable =
   Var <$> (symbol "77" >> word)
       <*> (symbol "PIC" >> variableType)
-      <*> (between (char '(') (char ')') L.decimal <* period)
+      <*> between (char '(') (char ')') L.decimal
 
 variableType :: Parser VType
 variableType = choice 
