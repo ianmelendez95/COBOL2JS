@@ -19,6 +19,7 @@ statement2js :: COBOL.Statement -> JS.Statement
 statement2js (COBOL.Display vs) = JS.Log (map c2jVal vs)
 statement2js (COBOL.Move val var) = JS.Set (c2jVar var) (JS.AVal (c2jVal val))
 statement2js (COBOL.Compute var val) = JS.Set (c2jVar var) (c2jArith val)
+statement2js COBOL.GoBack = JS.NoOp
 
 c2jVal :: COBOL.Value -> JS.Value
 c2jVal (COBOL.VarVal v) = JS.VarVal (c2jVar v)

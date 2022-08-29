@@ -9,6 +9,7 @@ newtype Script = Script [Statement] deriving Show
 
 data Statement = Log [Value]
                | Set T.Text Arith
+               | NoOp
                deriving Show
 
 data Arith = AVal Value
@@ -38,6 +39,7 @@ statementToText (Log vals) = "console.log(" <> args <> ")"
   where 
     args = T.concat . intersperse ", " . map valToScript $ vals
 statementToText (Set var val) = var <> " = " <> arithToScript val
+statementToText NoOp = ""
 
 arithToScript :: Arith -> T.Text
 arithToScript (AVal v) = valToScript v

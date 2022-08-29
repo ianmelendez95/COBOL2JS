@@ -68,7 +68,7 @@ readFile file_path = do
 
 prog :: Parser Prog
 prog = do 
-  Prog <$> (space >> identification)  -- identification
+  Prog <$> (lineStartSpace >> identification)  -- identification
        <*> (dataDivision <|> pure []) -- optional data
        <*> procedureDivision          -- procedure
 
@@ -198,13 +198,23 @@ strLit' :: Parser String
 strLit' = char '"' >> manyTill L.charLiteral (char '"')
 
 symbol :: T.Text -> Parser T.Text
-symbol = L.symbol space
+symbol = L.symbol tokenSpace
 
 lexeme :: Parser a -> Parser a
-lexeme = L.lexeme space
+lexeme = L.lexeme tokenSpace
 
-space :: Parser ()
-space = L.space space1 (L.skipLineComment "*") (L.skipBlockComment "/*" "*/")
+-- Space after tokens (essentially all space except comments, since those only exist on 'empty' lines)
+tokenSpace :: Parser ()
+tokenSpace = hspace >> option () (newline >> lineStartSpace)
+
+lineStartSpace :: Parser ()
+lineStartSpace = hspace >> option () (choice 
+  [ newline >> lineStartSpace
+  , char '*' >> lineCommentContent >> lineStartSpace
+  ])
+  where 
+    lineCommentContent :: Parser ()
+    lineCommentContent = void (takeWhileP (Just "character") (/= '\n'))
 
 -- Keywords
 
