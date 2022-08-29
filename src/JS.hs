@@ -1,9 +1,16 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module JS where 
+module JS 
+  ( Script (..)
+  , Statement (..)
+  , Arith (..)
+  , Value (..)
+  , AOp (..)
+  , scriptToText
+  ) where 
 
 import qualified Data.Text as T
-import Data.List
+import Data.List (intersperse)
 
 newtype Script = Script [Statement] deriving Show
 

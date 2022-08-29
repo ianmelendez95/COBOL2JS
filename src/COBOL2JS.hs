@@ -1,6 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module COBOL2JS where 
+module COBOL2JS 
+  ( c2jFile
+  ) where 
 
 import qualified COBOL as COBOL
 import qualified JS as JS
