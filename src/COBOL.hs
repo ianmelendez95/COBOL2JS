@@ -1,6 +1,18 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module COBOL where 
+module COBOL 
+  ( Prog (..)
+  , Statement (..)
+  , Value (..)
+
+  , Arith (..)
+  , ABin (..)
+  , AVal (..)
+  , AOp (..)
+
+  , COBOL.readFile
+  , arithValToValue
+  ) where 
 
 import Control.Monad (void)
 import Data.Void
