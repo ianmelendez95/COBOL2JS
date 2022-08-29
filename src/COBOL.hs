@@ -17,7 +17,6 @@ module COBOL
 import Control.Monad (void)
 import Data.Void
 import Data.Char
-import Data.Maybe
 import qualified Data.Set as Set
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
@@ -25,7 +24,6 @@ import qualified Data.Text.IO as TIO
 import Text.Megaparsec
 import Text.Megaparsec.Char hiding (space)
 import qualified Text.Megaparsec.Char.Lexer as L
-import Text.Megaparsec.Byte.Lexer (skipLineComment)
 import qualified Data.Foldable as Set
 
 type Parser = Parsec Void T.Text
@@ -251,19 +249,46 @@ keywords = Set.fromList
   , kGoBack
   ]
 
+kIdentification :: T.Text
 kIdentification = "IDENTIFICATION"
+
+kDivision :: T.Text
 kDivision       = "DIVISION"
+
+kProgramId :: T.Text
 kProgramId      = "PROGRAM-ID"
+
+kWorkingStorage :: T.Text
 kWorkingStorage = "WORKING-STORAGE"
+
+kData :: T.Text
 kData           = "DATA"
+
+kProcedure :: T.Text
 kProcedure      = "PROCEDURE"
+
+kSection :: T.Text
 kSection        = "SECTION"
+
+kPic :: T.Text
 kPic            = "PIC"
+
+kDisplay :: T.Text
 kDisplay        = "DISPLAY"
+
+kMove :: T.Text
 kMove           = "MOVE"
+
+kTo :: T.Text
 kTo             = "TO"
+
+kCompute :: T.Text
 kCompute        = "COMPUTE"
+
+kZero :: T.Text
 kZero           = "ZERO"
+
+kGoBack :: T.Text
 kGoBack         = "GOBACK"
 
 
