@@ -28,7 +28,11 @@ import qualified Data.Foldable as Set
 
 type Parser = Parsec Void T.Text
 
-data Prog = Prog IdentDiv DataDiv ProcDiv deriving Show
+data Prog = Prog IdentDiv 
+                 EnvDiv
+                 DataDiv 
+                 ProcDiv 
+          deriving Show
 
 data Statement = Display [Value]
                | Move Value T.Text
@@ -57,6 +61,10 @@ data IdentDiv = IdentDiv
   , identAuthor :: T.Text
   } deriving Show
 
+type EnvDiv = [FileCtrl]
+data FileCtrl = FCSelect T.Text T.Text
+              deriving Show
+
 type DataDiv = [Var]
 type ProcDiv = [Statement]
 
@@ -82,9 +90,10 @@ readFile file_path = do
 
 prog :: Parser Prog
 prog = do 
-  Prog <$> (lineStartSpace >> identificationDivision)  -- identificationDivision
-       <*> option [] dataDivision                      -- data
-       <*> procedureDivision                           -- procedure
+  Prog <$> (lineStartSpace >> identificationDivision) 
+       <*> option [] environmentDivision              
+       <*> option [] dataDivision                     
+       <*> procedureDivision                          
 
 identificationDivision :: Parser IdentDiv
 identificationDivision = do
@@ -96,6 +105,18 @@ identificationDivision = do
 
     author :: Parser T.Text
     author = symbol kAuthor >> period >> restOfLine
+
+environmentDivision :: Parser EnvDiv
+environmentDivision = do
+  _ <- symbols [kEnvironment, kDivision] >> period
+  _ <- symbols [kInputOutput, kSection ] >> period
+  _ <- symbol kFileControl >> period
+  many (selectStatement <* period)
+  where 
+    selectStatement :: Parser FileCtrl
+    selectStatement = 
+      FCSelect <$> (symbol kSelect >> word)
+               <*> (symbols [kAssign, kTo] >> word)
 
 dataDivision :: Parser DataDiv
 dataDivision = do 
@@ -216,6 +237,9 @@ strLit = T.pack <$> lexeme strLit'
 strLit' :: Parser String
 strLit' = char '"' >> manyTill L.charLiteral (char '"')
 
+symbols :: [T.Text] -> Parser [T.Text]
+symbols = traverse symbol
+
 symbol :: T.Text -> Parser T.Text
 symbol = L.symbol tokenSpace
 
@@ -270,6 +294,21 @@ kProgramId      = "PROGRAM-ID"
 
 kAuthor :: T.Text
 kAuthor = "AUTHOR"
+
+kEnvironment :: T.Text
+kEnvironment = "ENVIRONMENT"
+
+kInputOutput :: T.Text
+kInputOutput = "INPUT-OUTPUT"
+
+kFileControl :: T.Text
+kFileControl = "FILE-CONTROL"
+
+kSelect :: T.Text
+kSelect = "SELECT"
+
+kAssign :: T.Text
+kAssign = "ASSIGN"
 
 kWorkingStorage :: T.Text
 kWorkingStorage = "WORKING-STORAGE"

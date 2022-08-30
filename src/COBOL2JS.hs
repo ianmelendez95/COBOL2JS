@@ -15,7 +15,7 @@ c2jFile cobolSrc jsDest = do
   TIO.writeFile jsDest (JS.scriptToText jsScript)
 
 c2j :: COBOL.Prog -> JS.Script
-c2j (COBOL.Prog _ _ sts) = JS.Script (map statement2js sts)
+c2j (COBOL.Prog _ _ _ sts) = JS.Script (map statement2js sts)
 
 statement2js :: COBOL.Statement -> JS.Statement
 statement2js (COBOL.Display vs) = JS.Log (map c2jVal vs)
