@@ -52,7 +52,11 @@ data AVal = AVar T.Text
           | ANum Int
           deriving Show
 
-type IdentDiv = T.Text
+data IdentDiv = IdentDiv 
+  { identProgId :: T.Text
+  , identAuthor :: T.Text
+  } deriving Show
+
 type DataDiv = [Var]
 type ProcDiv = [Statement]
 
@@ -85,8 +89,13 @@ prog = do
 identification :: Parser IdentDiv
 identification = do
   _ <- symbol kIdentification >> symbol kDivision >> period
-  _ <- symbol kProgramId >> period
-  word <* period
+  IdentDiv <$> programId <*> option "" author
+  where 
+    programId :: Parser T.Text
+    programId = symbol kProgramId >> period >> restOfLine
+
+    author :: Parser T.Text
+    author = symbol kAuthor >> period >> restOfLine
 
 dataDivision :: Parser DataDiv
 dataDivision = do 
@@ -220,11 +229,11 @@ tokenSpace = hspace >> option () (newline >> lineStartSpace)
 lineStartSpace :: Parser ()
 lineStartSpace = hspace >> option () (choice 
   [ newline >> lineStartSpace
-  , char '*' >> lineCommentContent >> lineStartSpace
+  , char '*' >> void restOfLine
   ])
-  where 
-    lineCommentContent :: Parser ()
-    lineCommentContent = void (takeWhileP (Just "character") (/= '\n'))
+
+restOfLine :: Parser T.Text
+restOfLine = takeWhileP (Just "character") (/= '\n') <* lineStartSpace
 
 -- Keywords
 
@@ -236,6 +245,7 @@ keywords = Set.fromList
   [ kIdentification
   , kDivision
   , kProgramId
+  , kAuthor
   , kWorkingStorage
   , kData
   , kProcedure
@@ -249,14 +259,17 @@ keywords = Set.fromList
   , kGoBack
   ]
 
-kIdentification :: T.Text
-kIdentification = "IDENTIFICATION"
-
 kDivision :: T.Text
 kDivision       = "DIVISION"
 
+kIdentification :: T.Text
+kIdentification = "IDENTIFICATION"
+
 kProgramId :: T.Text
 kProgramId      = "PROGRAM-ID"
+
+kAuthor :: T.Text
+kAuthor = "AUTHOR"
 
 kWorkingStorage :: T.Text
 kWorkingStorage = "WORKING-STORAGE"
