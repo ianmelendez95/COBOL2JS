@@ -82,12 +82,12 @@ readFile file_path = do
 
 prog :: Parser Prog
 prog = do 
-  Prog <$> (lineStartSpace >> identification)  -- identification
-       <*> (dataDivision <|> pure []) -- optional data
-       <*> procedureDivision          -- procedure
+  Prog <$> (lineStartSpace >> identificationDivision)  -- identificationDivision
+       <*> option [] dataDivision                      -- data
+       <*> procedureDivision                           -- procedure
 
-identification :: Parser IdentDiv
-identification = do
+identificationDivision :: Parser IdentDiv
+identificationDivision = do
   _ <- symbol kIdentification >> symbol kDivision >> period
   IdentDiv <$> programId <*> option "" author
   where 
