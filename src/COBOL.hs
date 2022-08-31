@@ -17,6 +17,7 @@ module COBOL
 import Control.Monad (void)
 import Data.Void
 import Data.Char
+import Data.List ( group )
 import qualified Data.Set as Set
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
@@ -70,11 +71,9 @@ data Record = RGroup Int T.Text [Record]
             deriving Show
 
 data RFmt = RFmt [RFmtChar] RUsage (Maybe Value)
-          deriving Show
 
 data RUsage = RDisplay 
             | RComp3
-            deriving Show
 
 data RFmtChar = RFAlphaNum  -- X
               | RFNum       -- 9
@@ -83,7 +82,7 @@ data RFmtChar = RFAlphaNum  -- X
               | RFDecPer    -- .
               | RFCurrency  -- $
               | RFComma     -- ,
-              deriving Show
+              deriving Eq
 
 -- Procedure Division
 
@@ -114,7 +113,45 @@ data AVal = AVar T.Text
 data Value = VarVal T.Text
            | NumVal Int
            | StrVal T.Text
-           deriving Show
+
+-- Show Instances
+
+instance Show RFmt where 
+  show (RFmt chars usage fmt_val) = unwords 
+    [ T.unpack kPic
+    , showFmtChars chars 
+    , showUsage usage
+    , maybe "" (\v -> unwords [show kValue, show v]) fmt_val
+    ]
+    where 
+      showUsage :: RUsage -> String
+      showUsage RDisplay = ""
+      showUsage u = show u
+
+      showFmtChars :: [RFmtChar] -> String
+      showFmtChars cs = concatMap showCharGroup $ group cs
+
+      showCharGroup :: [RFmtChar] -> String
+      showCharGroup [] = ""
+      showCharGroup g@(c:_) = show c ++ "(" ++ show (length g) ++ ")"
+
+instance Show RUsage where 
+  show RDisplay = T.unpack kDisplay
+  show RComp3   = T.unpack kComp3
+
+instance Show RFmtChar where 
+  show RFAlphaNum = "X"
+  show RFNum      = "9"
+  show RFSign     = "S"
+  show RFDec      = "V"
+  show RFDecPer   = "."
+  show RFCurrency = "$"
+  show RFComma    = ","
+
+instance Show Value where 
+  show (VarVal t) = T.unpack t
+  show (NumVal n) = show n
+  show (StrVal s) = "\"" ++ T.unpack s ++ "\""
 
 arithValToValue :: AVal -> Value
 arithValToValue (AVar v) = VarVal v
