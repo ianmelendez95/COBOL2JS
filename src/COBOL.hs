@@ -70,7 +70,7 @@ data Record = RGroup Int T.Text [Record]
             deriving Show
 
 data RFmt = RFmtSimple [RFmtChar]
-          | RFmtDec    [RFmtChar]
+          | RFmtBinDec [RFmtChar]
           deriving Show
 
 data RFmtChar = RFAlphaNum  -- X
@@ -199,7 +199,7 @@ record = do
 recordFormat :: Parser RFmt
 recordFormat = do 
   cs <- concat <$> lexeme (many fmtCharItem)
-  option (RFmtSimple cs) (RFmtDec cs <$ symbol kComp3)
+  option (RFmtSimple cs) (RFmtBinDec cs <$ symbol kComp3)
   where 
     fmtCharItem :: Parser [RFmtChar]
     fmtCharItem = do 
