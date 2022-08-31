@@ -170,7 +170,7 @@ prog = do
   Prog <$> (lineStartSpace >> identificationDivision) 
        <*> option mempty environmentDivision              
        <*> option mempty dataDivision                     
-       <*> procedureDivision                          
+       <*> (procedureDivision <* eof)
 
 identificationDivision :: Parser IdentDiv
 identificationDivision = do
