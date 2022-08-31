@@ -34,6 +34,58 @@ data Prog = Prog IdentDiv
                  ProcDiv 
           deriving Show
 
+-- Identification Division
+
+data IdentDiv = IdentDiv 
+  { identProgId :: T.Text
+  , identAuthor :: T.Text
+  } deriving Show
+
+
+-- Environment Division
+
+type EnvDiv = [FileCtrl]
+data FileCtrl = FCSelect T.Text T.Text
+              deriving Show
+
+-- Data Division
+
+data DataDiv = DataDiv 
+  { dataFiles :: [FileDesc]
+  , dataStorage :: [Record] 
+  } deriving (Show)
+
+instance Semigroup DataDiv where 
+  (DataDiv files1 storage1) <> (DataDiv files2 storage2) = 
+    DataDiv (files1 <> files2) (storage1 <> storage2)
+
+instance Monoid DataDiv where 
+  mempty = DataDiv [] []
+
+data FileDesc = FileDesc T.Text Record
+              deriving Show
+
+data Record = RGroup Int T.Text [Record]
+            | RElem  Int T.Text RFmt
+            deriving Show
+
+data RFmt = RFmtSimple [RFmtChar]
+          | RFmtDec    [RFmtChar]
+          deriving Show
+
+data RFmtChar = RFAlphaNum  -- X
+              | RFNum       -- 9
+              | RFSign      -- S
+              | RFDec       -- V
+              | RFDecPer    -- .
+              | RFCurrency  -- $
+              | RFComma     -- ,
+              deriving Show
+
+-- Procedure Division
+
+type ProcDiv = [Statement]
+
 data Statement = Display [Value]
                | Move Value T.Text
                | Compute T.Text Arith
@@ -56,21 +108,6 @@ data AVal = AVar T.Text
           | ANum Int
           deriving Show
 
-data IdentDiv = IdentDiv 
-  { identProgId :: T.Text
-  , identAuthor :: T.Text
-  } deriving Show
-
-type EnvDiv = [FileCtrl]
-data FileCtrl = FCSelect T.Text T.Text
-              deriving Show
-
-type DataDiv = [Var]
-type ProcDiv = [Statement]
-
-data Var = Var T.Text VType Int deriving Show
-data VType = AlphaNum | Num deriving Show
-
 data Value = VarVal T.Text
            | NumVal Int
            | StrVal T.Text
@@ -91,8 +128,8 @@ readFile file_path = do
 prog :: Parser Prog
 prog = do 
   Prog <$> (lineStartSpace >> identificationDivision) 
-       <*> option [] environmentDivision              
-       <*> option [] dataDivision                     
+       <*> option mempty environmentDivision              
+       <*> option mempty dataDivision                     
        <*> procedureDivision                          
 
 identificationDivision :: Parser IdentDiv
@@ -120,20 +157,67 @@ environmentDivision = do
 
 dataDivision :: Parser DataDiv
 dataDivision = do 
-  _ <- symbol kData >> symbol kDivision >> period
-  _ <- symbol kWorkingStorage >> symbol kSection >> period
-  many (variable <* period)
+  _ <- symbols [kData, kDivision] >> period
+  DataDiv <$> option mempty fileSection 
+          <*> option mempty storageSection
+  where 
+    fileSection :: Parser [FileDesc]
+    fileSection = do
+      _ <- symbols [kFile, kSection] >> period
+      many fileDescriptor
+    
+    storageSection :: Parser [Record]
+    storageSection = do 
+      _ <- symbols [kWorkingStorage, kSection] >> period
+      many record
+    
 
-variable :: Parser Var
-variable =
-  Var <$> (symbol "77" >> word)
-      <*> (symbol kPic >> variableType)
-      <*> between (char '(') (char ')') L.decimal
 
-variableType :: Parser VType
-variableType = choice 
-  [ AlphaNum <$ char 'X'
-  , Num <$ char '9'
+fileDescriptor :: Parser FileDesc
+fileDescriptor = 
+  FileDesc <$> header <*> record
+  where 
+    header :: Parser T.Text
+    header = symbol kFd >> word <* (symbols [kRecording, kMode, "F"] >> period)
+
+record :: Parser Record
+record = do 
+  level <- (decimal :: Parser Int)
+  name  <- word
+  choice 
+    [ RElem  level name <$> (symbol kPic >> recordFormat <* period)
+    , RGroup level name <$> (period >> many (recordAbove level))
+    ]
+  where 
+    recordAbove :: Int -> Parser Record
+    recordAbove level_limit = do 
+      level <- (lookAhead decimal :: Parser Int) 
+      if level > level_limit 
+        then record
+        else fail $ "Expecting record above: " ++ show level_limit
+
+recordFormat :: Parser RFmt
+recordFormat = do 
+  cs <- concat <$> lexeme (many fmtCharItem)
+  option (RFmtSimple cs) (RFmtDec cs <$ symbol kComp3)
+  where 
+    fmtCharItem :: Parser [RFmtChar]
+    fmtCharItem = do 
+      c <- recordFormatChar 
+      option [c] ((`replicate` c) <$> fmtCharItemCount) -- account for replication e.g. X(3)
+    
+    fmtCharItemCount :: Parser Int
+    fmtCharItemCount = between (char '(') (char ')') L.decimal
+
+recordFormatChar :: Parser RFmtChar
+recordFormatChar = choice 
+  [ RFAlphaNum <$ char 'X'
+  , RFNum      <$ char '9'
+  , RFSign     <$ char 'S'
+  , RFDec      <$ char 'V'
+  , RFDecPer   <$ try (char '.' <* lookAhead recordFormatChar)
+  , RFCurrency <$ char '$'
+  , RFComma    <$ char ','
   ]
 
 procedureDivision :: Parser ProcDiv
@@ -315,6 +399,21 @@ kWorkingStorage = "WORKING-STORAGE"
 
 kData :: T.Text
 kData           = "DATA"
+
+kComp3 :: T.Text
+kComp3          = "COMP-3"
+
+kFile :: T.Text
+kFile           = "FILE"
+
+kFd :: T.Text
+kFd             = "FD"
+
+kRecording :: T.Text
+kRecording      = "RECORDING"
+
+kMode :: T.Text
+kMode           = "MODE"
 
 kProcedure :: T.Text
 kProcedure      = "PROCEDURE"
