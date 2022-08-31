@@ -69,9 +69,12 @@ data Record = RGroup Int T.Text [Record]
             | RElem  Int T.Text RFmt
             deriving Show
 
-data RFmt = RFmtSimple [RFmtChar]
-          | RFmtBinDec [RFmtChar]
+data RFmt = RFmt [RFmtChar] RUsage (Maybe Value)
           deriving Show
+
+data RUsage = RDisplay 
+            | RComp3
+            deriving Show
 
 data RFmtChar = RFAlphaNum  -- X
               | RFNum       -- 9
@@ -197,10 +200,12 @@ record = do
         else fail $ "Expecting record above: " ++ show level_limit
 
 recordFormat :: Parser RFmt
-recordFormat = do 
-  cs <- concat <$> lexeme (many fmtCharItem)
-  option (RFmtSimple cs) (RFmtBinDec cs <$ symbol kComp3)
+recordFormat =
+  RFmt <$> fmtChars <*> fmtUsage <*> fmtInitValue 
   where 
+    fmtChars :: Parser [RFmtChar]
+    fmtChars = lexeme (concat <$> many fmtCharItem)
+
     fmtCharItem :: Parser [RFmtChar]
     fmtCharItem = do 
       c <- recordFormatChar 
@@ -208,6 +213,12 @@ recordFormat = do
     
     fmtCharItemCount :: Parser Int
     fmtCharItemCount = between (char '(') (char ')') L.decimal
+
+    fmtUsage :: Parser RUsage
+    fmtUsage = option RDisplay (RComp3 <$ symbol kComp3)
+
+    fmtInitValue :: Parser (Maybe Value)
+    fmtInitValue = optional (symbol kValue >> value)
 
 recordFormatChar :: Parser RFmtChar
 recordFormatChar = choice 
@@ -282,9 +293,11 @@ arithmeticExpression = choice
 
 value :: Parser Value
 value = choice 
-  [ StrVal <$> strLit
-  , NumVal <$> decimal
-  , VarVal <$> word
+  [ StrVal     <$> strLit
+  , NumVal     <$> decimal
+  , VarVal     <$> word
+  , NumVal 0   <$  symbol kZero
+  , StrVal " " <$  symbol kSpace
   ]
 
 -- isKeyword :: T.Text -> Bool
@@ -400,9 +413,6 @@ kWorkingStorage = "WORKING-STORAGE"
 kData :: T.Text
 kData           = "DATA"
 
-kComp3 :: T.Text
-kComp3          = "COMP-3"
-
 kFile :: T.Text
 kFile           = "FILE"
 
@@ -414,6 +424,18 @@ kRecording      = "RECORDING"
 
 kMode :: T.Text
 kMode           = "MODE"
+
+kComp3 :: T.Text
+kComp3          = "COMP-3"
+
+kValue :: T.Text
+kValue          = "VALUE"
+
+kSpace :: T.Text
+kSpace          = "SPACE"
+
+kZero :: T.Text
+kZero           = "ZERO"
 
 kProcedure :: T.Text
 kProcedure      = "PROCEDURE"
@@ -435,9 +457,6 @@ kTo             = "TO"
 
 kCompute :: T.Text
 kCompute        = "COMPUTE"
-
-kZero :: T.Text
-kZero           = "ZERO"
 
 kGoBack :: T.Text
 kGoBack         = "GOBACK"
