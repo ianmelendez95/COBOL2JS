@@ -300,9 +300,6 @@ value = choice
   , StrVal " " <$  symbol kSpace
   ]
 
--- isKeyword :: T.Text -> Bool
--- isKeyword = 
-
 word :: Parser T.Text
 word = try . lexeme $ do
   w <- rawWord
