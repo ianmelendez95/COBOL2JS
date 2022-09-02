@@ -102,8 +102,12 @@ type Sentence = [Statement]
 data Statement = Display [Value]
                | Move Value T.Text
                | Compute T.Text Arith
+               | Open Put T.Text
                | GoBack
                deriving Show
+
+data Put = Input | Output 
+         deriving Show
               
 data Arith = AVal Value
            | ABin1 ABin
@@ -297,6 +301,7 @@ statement = choice
   , moveStatement
   , computeStatement
   , GoBack <$ symbolShow KGoback
+  , openStatement
   ]
 
 displayStatement :: Parser Statement
@@ -342,6 +347,14 @@ arithmeticExpression = choice
       [ Mult <$ symbol "*"
       , Add  <$ symbol "+"
       ]
+
+openStatement :: Parser Statement
+openStatement = 
+  Open <$> (symbolShow KOpen >> choice 
+             [ Input  <$ symbolShow KInput
+             , Output <$ symbolShow KOutput
+             ])
+       <*> word
 
 value :: Parser Value
 value = choice 

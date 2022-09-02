@@ -39,6 +39,9 @@ data Keyword = KDivision
              | KProcedure
              | KSection 
              | KPic 
+             | KOpen
+             | KInput
+             | KOutput
              | KDisplay 
              | KMove 
              | KTo 
