@@ -39,6 +39,7 @@ library:
   - text
   - megaparsec
   - containers
+  - generic-deriving
 
 executables:
   COBOL2JS-exe:

@@ -26,7 +26,10 @@ source-repository head
 library
   exposed-modules:
       COBOL
+      COBOL.Keyword
       COBOL2JS
+      Generic.GReadEnum
+      Generic.GShowEnum
       JS
       Lib
   other-modules:
@@ -37,6 +40,7 @@ library
   build-depends:
       base >=4.7 && <5
     , containers
+    , generic-deriving
     , megaparsec
     , text
   default-language: Haskell2010

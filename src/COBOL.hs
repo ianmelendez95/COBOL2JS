@@ -2,6 +2,8 @@
 
 module COBOL 
   ( Prog (..)
+  , Para (..)
+  , Sentence
   , Statement (..)
   , Value (..)
 
@@ -17,15 +19,19 @@ module COBOL
 import Control.Monad (void)
 import Data.Void
 import Data.Char
+import Data.Maybe
+import Text.Read (readMaybe)
 import Data.List ( group )
 import qualified Data.Set as Set
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
 
 import Text.Megaparsec
-import Text.Megaparsec.Char hiding (space)
+import Text.Megaparsec.Char ( char, hspace, newline )
 import qualified Text.Megaparsec.Char.Lexer as L
 import qualified Data.Foldable as Set
+
+import COBOL.Keyword
 
 type Parser = Parsec Void T.Text
 
@@ -86,7 +92,12 @@ data RFmtChar = RFAlphaNum  -- X
 
 -- Procedure Division
 
-type ProcDiv = [Statement]
+type ProcDiv = [Para]
+
+data Para = Para (Maybe T.Text) [Sentence]
+          deriving Show
+
+type Sentence = [Statement]
 
 data Statement = Display [Value]
                | Move Value T.Text
@@ -118,10 +129,10 @@ data Value = VarVal T.Text
 
 instance Show RFmt where 
   show (RFmt chars usage fmt_val) = unwords 
-    [ T.unpack kPic
+    [ show KPic
     , showFmtChars chars 
     , showUsage usage
-    , maybe "" (\v -> unwords [show kValue, show v]) fmt_val
+    , maybe "" (\v -> unwords [show KValue, show v]) fmt_val
     ]
     where 
       showUsage :: RUsage -> String
@@ -136,8 +147,8 @@ instance Show RFmt where
       showCharGroup g@(c:_) = show c ++ "(" ++ show (length g) ++ ")"
 
 instance Show RUsage where 
-  show RDisplay = T.unpack kDisplay
-  show RComp3   = T.unpack kComp3
+  show RDisplay = show KDisplay
+  show RComp3   = show KComp3
 
 instance Show RFmtChar where 
   show RFAlphaNum = "X"
@@ -174,58 +185,56 @@ prog = do
 
 identificationDivision :: Parser IdentDiv
 identificationDivision = do
-  _ <- symbol kIdentification >> symbol kDivision >> period
+  _ <- symbolShow KIdentification >> symbolShow KDivision >> period
   IdentDiv <$> programId <*> option "" author
   where 
     programId :: Parser T.Text
-    programId = symbol kProgramId >> period >> restOfLine
+    programId = symbolShow KProgramId >> period >> restOfLine
 
     author :: Parser T.Text
-    author = symbol kAuthor >> period >> restOfLine
+    author = symbolShow KAuthor >> period >> restOfLine
 
 environmentDivision :: Parser EnvDiv
 environmentDivision = do
-  _ <- symbols [kEnvironment, kDivision] >> period
-  _ <- symbols [kInputOutput, kSection ] >> period
-  _ <- symbol kFileControl >> period
+  _ <- symbolsShow [KEnvironment, KDivision] >> period
+  _ <- symbolsShow [KInputOutput, KSection ] >> period
+  _ <- symbolShow KFileControl >> period
   many (selectStatement <* period)
   where 
     selectStatement :: Parser FileCtrl
     selectStatement = 
-      FCSelect <$> (symbol kSelect >> word)
-               <*> (symbols [kAssign, kTo] >> word)
+      FCSelect <$> (symbolShow KSelect >> word)
+               <*> (symbolsShow [KAssign, KTo] >> word)
 
 dataDivision :: Parser DataDiv
 dataDivision = do 
-  _ <- symbols [kData, kDivision] >> period
+  _ <- symbolsShow [KData, KDivision] >> period
   DataDiv <$> option mempty fileSection 
           <*> option mempty storageSection
   where 
     fileSection :: Parser [FileDesc]
     fileSection = do
-      _ <- symbols [kFile, kSection] >> period
+      _ <- symbolsShow [KFile, KSection] >> period
       many fileDescriptor
     
     storageSection :: Parser [Record]
     storageSection = do 
-      _ <- symbols [kWorkingStorage, kSection] >> period
+      _ <- symbolsShow [KWorkingStorage, KSection] >> period
       many record
-    
-
 
 fileDescriptor :: Parser FileDesc
 fileDescriptor = 
   FileDesc <$> header <*> record
   where 
     header :: Parser T.Text
-    header = symbol kFd >> word <* (symbols [kRecording, kMode, "F"] >> period)
+    header = symbolShow KFd >> word <* (symbols [showT KRecording, showT KMode, "F"] >> period)
 
 record :: Parser Record
 record = do 
   level <- (decimal :: Parser Int)
   name  <- word
   choice 
-    [ RElem  level name <$> (symbol kPic >> recordFormat <* period)
+    [ RElem  level name <$> (symbolShow KPic >> recordFormat <* period)
     , RGroup level name <$> (period >> many (recordAbove level))
     ]
   where 
@@ -252,10 +261,10 @@ recordFormat =
     fmtCharItemCount = between (char '(') (char ')') L.decimal
 
     fmtUsage :: Parser RUsage
-    fmtUsage = option RDisplay (RComp3 <$ symbol kComp3)
+    fmtUsage = option RDisplay (RComp3 <$ symbolShow KComp3)
 
     fmtInitValue :: Parser (Maybe Value)
-    fmtInitValue = optional (symbol kValue >> value)
+    fmtInitValue = optional (symbolShow KValue >> value)
 
 recordFormatChar :: Parser RFmtChar
 recordFormatChar = choice 
@@ -270,8 +279,14 @@ recordFormatChar = choice
 
 procedureDivision :: Parser ProcDiv
 procedureDivision = do
-  _ <- symbol kProcedure >> symbol kDivision >> period
-  concat <$> many sentence
+  _ <- symbolShow KProcedure >> symbolShow KDivision >> period
+  many paragraph
+
+paragraph :: Parser Para
+paragraph = choice 
+  [ Para . Just <$> (word <* period) <*> many sentence
+  , Para Nothing                     <$> many sentence
+  ]
 
 sentence :: Parser [Statement]
 sentence = many statement <* period
@@ -281,20 +296,20 @@ statement = choice
   [ displayStatement
   , moveStatement
   , computeStatement
-  , GoBack <$ symbol kGoBack
+  , GoBack <$ symbolShow KGoback
   ]
 
 displayStatement :: Parser Statement
-displayStatement = Display <$> (symbol kDisplay >> some value)
+displayStatement = Display <$> (symbolShow KDisplay >> some value)
 
 moveStatement :: Parser Statement 
 moveStatement =
-  Move <$> (symbol kMove >> value)
-       <*> (symbol kTo >> word)
+  Move <$> (symbolShow KMove >> value)
+       <*> (symbolShow KTo >> word)
 
 computeStatement :: Parser Statement
 computeStatement = 
-  Compute <$> (symbol kCompute >> word)
+  Compute <$> (symbolShow KCompute >> word)
           <*> (symbol "=" >> arithmeticExpression)
 
 -- https://www.ibm.com/docs/en/cobol-zos/6.4?topic=structure-arithmetic-expressions
@@ -317,7 +332,7 @@ arithmeticExpression = choice
 
     arithVal :: Parser AVal
     arithVal = choice 
-      [ ANum 0 <$  symbol kZero 
+      [ ANum 0 <$  symbolShow KZero 
       , ANum   <$> decimal
       , AVar   <$> word
       ]
@@ -333,15 +348,15 @@ value = choice
   [ StrVal     <$> strLit
   , NumVal     <$> decimal
   , VarVal     <$> word
-  , NumVal 0   <$  symbol kZero
-  , StrVal " " <$  symbol kSpace
+  , NumVal 0   <$  symbolShow KZero
+  , StrVal " " <$  symbolShow KSpace
   ]
 
 word :: Parser T.Text
 word = try . lexeme $ do
   w <- rawWord
   if isKeyword w 
-    then failT ("Expecting word, found keyword: " <> w) 
+    then failT ("Expecting word, found Keyword: " <> w) 
     else pure w
   where 
     rawWord :: Parser T.Text
@@ -368,18 +383,24 @@ strLit = T.pack <$> lexeme strLit'
 strLit' :: Parser String
 strLit' = char '"' >> manyTill L.charLiteral (char '"')
 
+symbolsShow :: Show a => [a] -> Parser [T.Text]
+symbolsShow = traverse symbolShow
+
 symbols :: [T.Text] -> Parser [T.Text]
 symbols = traverse symbol
 
+symbolShow :: Show a => a -> Parser T.Text
+symbolShow = symbol . showT 
+
 symbol :: T.Text -> Parser T.Text
-symbol = L.symbol tokenSpace
+symbol = L.symbol toKenSpace
 
 lexeme :: Parser a -> Parser a
-lexeme = L.lexeme tokenSpace
+lexeme = L.lexeme toKenSpace
 
--- Space after tokens (essentially all space except comments, since those only exist on 'empty' lines)
-tokenSpace :: Parser ()
-tokenSpace = hspace >> option () (newline >> lineStartSpace)
+-- Space after toKens (essentially all space except comments, since those only exist on 'empty' lines)
+toKenSpace :: Parser ()
+toKenSpace = hspace >> option () (newline >> lineStartSpace)
 
 lineStartSpace :: Parser ()
 lineStartSpace = hspace >> option () (choice 
@@ -393,108 +414,13 @@ restOfLine = takeWhileP (Just "character") (/= '\n') <* lineStartSpace
 -- Keywords
 
 isKeyword :: T.Text -> Bool
-isKeyword t = t `Set.elem` keywords
+isKeyword = isJust . readKeyword . T.unpack
+  where 
+    readKeyword :: String -> Maybe Keyword
+    readKeyword = readMaybe
 
-keywords :: Set.Set T.Text
-keywords = Set.fromList 
-  [ kIdentification
-  , kDivision
-  , kProgramId
-  , kAuthor
-  , kWorkingStorage
-  , kData
-  , kProcedure
-  , kSection
-  , kPic
-  , kDisplay
-  , kMove
-  , kTo
-  , kCompute
-  , kZero
-  , kGoBack
-  ]
-
-kDivision :: T.Text
-kDivision       = "DIVISION"
-
-kIdentification :: T.Text
-kIdentification = "IDENTIFICATION"
-
-kProgramId :: T.Text
-kProgramId      = "PROGRAM-ID"
-
-kAuthor :: T.Text
-kAuthor = "AUTHOR"
-
-kEnvironment :: T.Text
-kEnvironment = "ENVIRONMENT"
-
-kInputOutput :: T.Text
-kInputOutput = "INPUT-OUTPUT"
-
-kFileControl :: T.Text
-kFileControl = "FILE-CONTROL"
-
-kSelect :: T.Text
-kSelect = "SELECT"
-
-kAssign :: T.Text
-kAssign = "ASSIGN"
-
-kWorkingStorage :: T.Text
-kWorkingStorage = "WORKING-STORAGE"
-
-kData :: T.Text
-kData           = "DATA"
-
-kFile :: T.Text
-kFile           = "FILE"
-
-kFd :: T.Text
-kFd             = "FD"
-
-kRecording :: T.Text
-kRecording      = "RECORDING"
-
-kMode :: T.Text
-kMode           = "MODE"
-
-kComp3 :: T.Text
-kComp3          = "COMP-3"
-
-kValue :: T.Text
-kValue          = "VALUE"
-
-kSpace :: T.Text
-kSpace          = "SPACE"
-
-kZero :: T.Text
-kZero           = "ZERO"
-
-kProcedure :: T.Text
-kProcedure      = "PROCEDURE"
-
-kSection :: T.Text
-kSection        = "SECTION"
-
-kPic :: T.Text
-kPic            = "PIC"
-
-kDisplay :: T.Text
-kDisplay        = "DISPLAY"
-
-kMove :: T.Text
-kMove           = "MOVE"
-
-kTo :: T.Text
-kTo             = "TO"
-
-kCompute :: T.Text
-kCompute        = "COMPUTE"
-
-kGoBack :: T.Text
-kGoBack         = "GOBACK"
-
+showT :: Show a => a -> T.Text
+showT = T.pack . show
 
 failT :: MonadFail m => T.Text -> m a
 failT = fail . T.unpack
