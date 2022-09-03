@@ -104,6 +104,7 @@ data Statement = Display [Value]
                | Compute T.Text Arith
                | Open Put T.Text
                | Perform T.Text
+               | PerformUntil Cond Sentence
                | GoBack
                deriving Show
 
@@ -124,6 +125,16 @@ data AOp = Mult
 
 data AVal = AVar T.Text
           | ANum Int
+          deriving Show
+
+data Cond = Cond CVal COp CVal
+          deriving Show
+
+data COp = CEq
+         deriving Show
+
+data CVal = CVar T.Text 
+          | CStr T.Text
           deriving Show
 
 data Value = VarVal T.Text
@@ -201,30 +212,30 @@ identificationDivision = do
 
 environmentDivision :: Parser EnvDiv
 environmentDivision = do
-  _ <- symbolsShow [KEnvironment, KDivision] >> period
-  _ <- symbolsShow [KInputOutput, KSection ] >> period
+  _ <- symbolsS [KEnvironment, KDivision] >> period
+  _ <- symbolsS [KInputOutput, KSection ] >> period
   _ <- symbolS KFileControl >> period
   many (selectStatement <* period)
   where 
     selectStatement :: Parser FileCtrl
     selectStatement = 
       FCSelect <$> (symbolS KSelect >> word)
-               <*> (symbolsShow [KAssign, KTo] >> word)
+               <*> (symbolsS [KAssign, KTo] >> word)
 
 dataDivision :: Parser DataDiv
 dataDivision = do 
-  _ <- symbolsShow [KData, KDivision] >> period
+  _ <- symbolsS [KData, KDivision] >> period
   DataDiv <$> option mempty fileSection 
           <*> option mempty storageSection
   where 
     fileSection :: Parser [FileDesc]
     fileSection = do
-      _ <- symbolsShow [KFile, KSection] >> period
+      _ <- symbolsS [KFile, KSection] >> period
       many fileDescriptor
     
     storageSection :: Parser [Record]
     storageSection = do 
-      _ <- symbolsShow [KWorkingStorage, KSection] >> period
+      _ <- symbolsS [KWorkingStorage, KSection] >> period
       many record
 
 fileDescriptor :: Parser FileDesc
@@ -359,7 +370,28 @@ openStatement =
        <*> word
 
 performStatement :: Parser Statement
-performStatement = Perform <$> (symbolS KPerform >> word)
+performStatement = do
+  _ <- symbolS KPerform
+  untilPhrase <|> simple
+  where 
+    untilPhrase :: Parser Statement
+    untilPhrase = PerformUntil <$> (symbolS KUntil >> condition)
+                               <*> (many statement <* symbolS KEndPerform)
+    
+    simple :: Parser Statement 
+    simple = Perform <$> word
+
+condition :: Parser Cond
+condition = Cond <$> condValue <*> condOp <*> condValue
+
+condOp :: Parser COp
+condOp = CEq <$ symbol "="
+
+condValue :: Parser CVal
+condValue = choice 
+  [ CStr <$> strLit
+  , CVar <$> word
+  ]
 
 value :: Parser Value
 value = choice 
@@ -399,10 +431,13 @@ strLit :: Parser T.Text
 strLit = T.pack <$> lexeme strLit'
 
 strLit' :: Parser String
-strLit' = char '"' >> manyTill L.charLiteral (char '"')
+strLit' = choice 
+  [ char '"' >> manyTill L.charLiteral (char '"')
+  , char '\'' >> manyTill L.charLiteral (char '\'') 
+  ]
 
-symbolsShow :: Show a => [a] -> Parser [T.Text]
-symbolsShow = traverse symbolS
+symbolsS :: Show a => [a] -> Parser [T.Text]
+symbolsS = traverse symbolS
 
 symbols :: [T.Text] -> Parser [T.Text]
 symbols = traverse symbol
