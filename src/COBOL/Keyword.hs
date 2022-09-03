@@ -46,6 +46,7 @@ data Keyword = KDivision
              | KMove 
              | KTo 
              | KCompute
+             | KPerform
              | KGoback
              deriving (Generic)
 

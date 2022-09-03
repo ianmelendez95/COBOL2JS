@@ -103,6 +103,7 @@ data Statement = Display [Value]
                | Move Value T.Text
                | Compute T.Text Arith
                | Open Put T.Text
+               | Perform T.Text
                | GoBack
                deriving Show
 
@@ -189,25 +190,25 @@ prog = do
 
 identificationDivision :: Parser IdentDiv
 identificationDivision = do
-  _ <- symbolShow KIdentification >> symbolShow KDivision >> period
+  _ <- symbolS KIdentification >> symbolS KDivision >> period
   IdentDiv <$> programId <*> option "" author
   where 
     programId :: Parser T.Text
-    programId = symbolShow KProgramId >> period >> restOfLine
+    programId = symbolS KProgramId >> period >> restOfLine
 
     author :: Parser T.Text
-    author = symbolShow KAuthor >> period >> restOfLine
+    author = symbolS KAuthor >> period >> restOfLine
 
 environmentDivision :: Parser EnvDiv
 environmentDivision = do
   _ <- symbolsShow [KEnvironment, KDivision] >> period
   _ <- symbolsShow [KInputOutput, KSection ] >> period
-  _ <- symbolShow KFileControl >> period
+  _ <- symbolS KFileControl >> period
   many (selectStatement <* period)
   where 
     selectStatement :: Parser FileCtrl
     selectStatement = 
-      FCSelect <$> (symbolShow KSelect >> word)
+      FCSelect <$> (symbolS KSelect >> word)
                <*> (symbolsShow [KAssign, KTo] >> word)
 
 dataDivision :: Parser DataDiv
@@ -231,14 +232,14 @@ fileDescriptor =
   FileDesc <$> header <*> record
   where 
     header :: Parser T.Text
-    header = symbolShow KFd >> word <* (symbols [showT KRecording, showT KMode, "F"] >> period)
+    header = symbolS KFd >> word <* (symbols [showT KRecording, showT KMode, "F"] >> period)
 
 record :: Parser Record
 record = do 
   level <- (decimal :: Parser Int)
   name  <- word
   choice 
-    [ RElem  level name <$> (symbolShow KPic >> recordFormat <* period)
+    [ RElem  level name <$> (symbolS KPic >> recordFormat <* period)
     , RGroup level name <$> (period >> many (recordAbove level))
     ]
   where 
@@ -265,10 +266,10 @@ recordFormat =
     fmtCharItemCount = between (char '(') (char ')') L.decimal
 
     fmtUsage :: Parser RUsage
-    fmtUsage = option RDisplay (RComp3 <$ symbolShow KComp3)
+    fmtUsage = option RDisplay (RComp3 <$ symbolS KComp3)
 
     fmtInitValue :: Parser (Maybe Value)
-    fmtInitValue = optional (symbolShow KValue >> value)
+    fmtInitValue = optional (symbolS KValue >> value)
 
 recordFormatChar :: Parser RFmtChar
 recordFormatChar = choice 
@@ -283,7 +284,7 @@ recordFormatChar = choice
 
 procedureDivision :: Parser ProcDiv
 procedureDivision = do
-  _ <- symbolShow KProcedure >> symbolShow KDivision >> period
+  _ <- symbolS KProcedure >> symbolS KDivision >> period
   many paragraph
 
 paragraph :: Parser Para
@@ -300,21 +301,22 @@ statement = choice
   [ displayStatement
   , moveStatement
   , computeStatement
-  , GoBack <$ symbolShow KGoback
+  , GoBack <$ symbolS KGoback
   , openStatement
+  , performStatement
   ]
 
 displayStatement :: Parser Statement
-displayStatement = Display <$> (symbolShow KDisplay >> some value)
+displayStatement = Display <$> (symbolS KDisplay >> some value)
 
 moveStatement :: Parser Statement 
 moveStatement =
-  Move <$> (symbolShow KMove >> value)
-       <*> (symbolShow KTo >> word)
+  Move <$> (symbolS KMove >> value)
+       <*> (symbolS KTo >> word)
 
 computeStatement :: Parser Statement
 computeStatement = 
-  Compute <$> (symbolShow KCompute >> word)
+  Compute <$> (symbolS KCompute >> word)
           <*> (symbol "=" >> arithmeticExpression)
 
 -- https://www.ibm.com/docs/en/cobol-zos/6.4?topic=structure-arithmetic-expressions
@@ -337,7 +339,7 @@ arithmeticExpression = choice
 
     arithVal :: Parser AVal
     arithVal = choice 
-      [ ANum 0 <$  symbolShow KZero 
+      [ ANum 0 <$  symbolS KZero 
       , ANum   <$> decimal
       , AVar   <$> word
       ]
@@ -350,19 +352,22 @@ arithmeticExpression = choice
 
 openStatement :: Parser Statement
 openStatement = 
-  Open <$> (symbolShow KOpen >> choice 
-             [ Input  <$ symbolShow KInput
-             , Output <$ symbolShow KOutput
+  Open <$> (symbolS KOpen >> choice 
+             [ Input  <$ symbolS KInput
+             , Output <$ symbolS KOutput
              ])
        <*> word
+
+performStatement :: Parser Statement
+performStatement = Perform <$> (symbolS KPerform >> word)
 
 value :: Parser Value
 value = choice 
   [ StrVal     <$> strLit
   , NumVal     <$> decimal
   , VarVal     <$> word
-  , NumVal 0   <$  symbolShow KZero
-  , StrVal " " <$  symbolShow KSpace
+  , NumVal 0   <$  symbolS KZero
+  , StrVal " " <$  symbolS KSpace
   ]
 
 word :: Parser T.Text
@@ -397,13 +402,13 @@ strLit' :: Parser String
 strLit' = char '"' >> manyTill L.charLiteral (char '"')
 
 symbolsShow :: Show a => [a] -> Parser [T.Text]
-symbolsShow = traverse symbolShow
+symbolsShow = traverse symbolS
 
 symbols :: [T.Text] -> Parser [T.Text]
 symbols = traverse symbol
 
-symbolShow :: Show a => a -> Parser T.Text
-symbolShow = symbol . showT 
+symbolS :: Show a => a -> Parser T.Text
+symbolS = symbol . showT 
 
 symbol :: T.Text -> Parser T.Text
 symbol = L.symbol toKenSpace
