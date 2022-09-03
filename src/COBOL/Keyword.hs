@@ -44,6 +44,9 @@ data Keyword = KDivision
              | KInput
              | KOutput
              | KRead 
+             | KAt
+             | KEnd
+             | KEndRead
              | KWrite
              | KDisplay 
              | KMove 

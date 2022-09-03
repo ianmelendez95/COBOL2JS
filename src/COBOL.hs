@@ -22,16 +22,16 @@ import Data.Char
 import Data.Maybe
 import Text.Read (readMaybe)
 import Data.List ( group )
-import qualified Data.Set as Set
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
 
 import Text.Megaparsec
 import Text.Megaparsec.Char ( char, hspace, newline )
 import qualified Text.Megaparsec.Char.Lexer as L
-import qualified Data.Foldable as Set
 
 import COBOL.Keyword
+
+import Debug.Trace
 
 type Parser = Parsec Void T.Text
 
@@ -104,10 +104,10 @@ data Statement = Display [Value]
                | Compute T.Text Arith
                | Open Put T.Text
                | Close T.Text
-               | Read T.Text
+               | Read T.Text (Maybe [Statement])
                | Write T.Text
                | Perform T.Text
-               | PerformUntil Cond Sentence
+               | PerformUntil Cond [Statement]
                | GoBack
                deriving Show
 
@@ -246,7 +246,11 @@ fileDescriptor =
   FileDesc <$> header <*> record
   where 
     header :: Parser T.Text
-    header = keyword KFd >> identifier <* (symbols [showT KRecording, showT KMode, "F"] >> period)
+    header = keyword KFd >> identifier <* recordingMode
+
+    recordingMode :: Parser ()
+    recordingMode = 
+      keywords [KRecording, KMode] >> symbol "F" >> period
 
 record :: Parser Record
 record = do 
@@ -379,10 +383,15 @@ closeStatement :: Parser Statement
 closeStatement = Close <$> (keyword KClose >> identifier)
 
 readStatement :: Parser Statement 
-readStatement = Read <$> (keyword KRead >> word)
+readStatement = Read <$> (keyword KRead >> identifier)
+                     <*> optional atEndS
+  where 
+    atEndS :: Parser [Statement]
+    atEndS = keywords [KAt, KEnd] 
+               >> (many statement <* keyword KEndRead)
 
 writeStatement :: Parser Statement 
-writeStatement = Write <$> (keyword KWrite >> word)
+writeStatement = Write <$> (keyword KWrite >> identifier)
 
 performStatement :: Parser Statement
 performStatement = do
@@ -427,14 +436,11 @@ keyword k = try . lexeme $ (k <$ keywordText)
     keywordText = chunk (showT k) <* notFollowedBy (satisfy isIdentifierChar)
 
 identifier :: Parser T.Text
-identifier = try $ do
-  w <- word
+identifier = try . lexeme $ do
+  w <- T.cons <$> first <*> rest
   if isKeyword w 
     then failT ("Expecting identifier, found keyword: " <> w) 
     else pure w
-
-word :: Parser T.Text
-word = try . lexeme $ (T.cons <$> first <*> rest) 
   where 
     first :: Parser Char
     first = satisfy isAlpha
@@ -459,15 +465,6 @@ strLit' = choice
   [ char '"' >> manyTill L.charLiteral (char '"')
   , char '\'' >> manyTill L.charLiteral (char '\'') 
   ]
-
-symbolsS :: Show a => [a] -> Parser [T.Text]
-symbolsS = traverse symbolS
-
-symbols :: [T.Text] -> Parser [T.Text]
-symbols = traverse symbol
-
-symbolS :: Show a => a -> Parser T.Text
-symbolS = symbol . showT 
 
 symbol :: T.Text -> Parser T.Text
 symbol = L.symbol tokenSpace
