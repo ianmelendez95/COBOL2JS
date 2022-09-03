@@ -451,14 +451,14 @@ symbolS :: Show a => a -> Parser T.Text
 symbolS = symbol . showT 
 
 symbol :: T.Text -> Parser T.Text
-symbol = L.symbol toKenSpace
+symbol = L.symbol tokenSpace
 
 lexeme :: Parser a -> Parser a
-lexeme = L.lexeme toKenSpace
+lexeme = L.lexeme tokenSpace
 
 -- Space after toKens (essentially all space except comments, since those only exist on 'empty' lines)
-toKenSpace :: Parser ()
-toKenSpace = hspace >> option () (newline >> lineStartSpace)
+tokenSpace :: Parser ()
+tokenSpace = hspace >> option () (newline >> lineStartSpace)
 
 lineStartSpace :: Parser ()
 lineStartSpace = hspace >> option () (choice 
