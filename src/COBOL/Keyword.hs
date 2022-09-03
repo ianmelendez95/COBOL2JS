@@ -40,6 +40,7 @@ data Keyword = KDivision
              | KSection 
              | KPic 
              | KOpen
+             | KClose
              | KInput
              | KOutput
              | KDisplay 

@@ -103,6 +103,7 @@ data Statement = Display [Value]
                | Move Value T.Text
                | Compute T.Text Arith
                | Open Put T.Text
+               | Close T.Text
                | Perform T.Text
                | PerformUntil Cond Sentence
                | GoBack
@@ -314,6 +315,7 @@ statement = choice
   , computeStatement
   , GoBack <$ symbolS KGoback
   , openStatement
+  , closeStatement
   , performStatement
   ]
 
@@ -368,6 +370,9 @@ openStatement =
              , Output <$ symbolS KOutput
              ])
        <*> word
+
+closeStatement :: Parser Statement
+closeStatement = Close <$> (symbolS KClose >> word)
 
 performStatement :: Parser Statement
 performStatement = do
