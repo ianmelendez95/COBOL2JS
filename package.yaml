@@ -40,6 +40,7 @@ library:
   - megaparsec
   - containers
   - generic-deriving
+  - split
 
 executables:
   COBOL2JS-exe:
