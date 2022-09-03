@@ -202,41 +202,41 @@ prog = do
 
 identificationDivision :: Parser IdentDiv
 identificationDivision = do
-  _ <- symbolS KIdentification >> symbolS KDivision >> period
+  _ <- keyword KIdentification >> keyword KDivision >> period
   IdentDiv <$> programId <*> option "" author
   where 
     programId :: Parser T.Text
-    programId = symbolS KProgramId >> period >> restOfLine
+    programId = keyword KProgramId >> period >> restOfLine
 
     author :: Parser T.Text
-    author = symbolS KAuthor >> period >> restOfLine
+    author = keyword KAuthor >> period >> restOfLine
 
 environmentDivision :: Parser EnvDiv
 environmentDivision = do
-  _ <- symbolsS [KEnvironment, KDivision] >> period
-  _ <- symbolsS [KInputOutput, KSection ] >> period
-  _ <- symbolS KFileControl >> period
+  _ <- keywords [KEnvironment, KDivision] >> period
+  _ <- keywords [KInputOutput, KSection ] >> period
+  _ <- keyword KFileControl >> period
   many (selectStatement <* period)
   where 
     selectStatement :: Parser FileCtrl
     selectStatement = 
-      FCSelect <$> (symbolS KSelect >> word)
-               <*> (symbolsS [KAssign, KTo] >> word)
+      FCSelect <$> (keyword KSelect >> identifier)
+               <*> (keywords [KAssign, KTo] >> identifier)
 
 dataDivision :: Parser DataDiv
 dataDivision = do 
-  _ <- symbolsS [KData, KDivision] >> period
+  _ <- keywords [KData, KDivision] >> period
   DataDiv <$> option mempty fileSection 
           <*> option mempty storageSection
   where 
     fileSection :: Parser [FileDesc]
     fileSection = do
-      _ <- symbolsS [KFile, KSection] >> period
+      _ <- keywords [KFile, KSection] >> period
       many fileDescriptor
     
     storageSection :: Parser [Record]
     storageSection = do 
-      _ <- symbolsS [KWorkingStorage, KSection] >> period
+      _ <- keywords [KWorkingStorage, KSection] >> period
       many record
 
 fileDescriptor :: Parser FileDesc
@@ -244,14 +244,14 @@ fileDescriptor =
   FileDesc <$> header <*> record
   where 
     header :: Parser T.Text
-    header = symbolS KFd >> word <* (symbols [showT KRecording, showT KMode, "F"] >> period)
+    header = keyword KFd >> identifier <* (symbols [showT KRecording, showT KMode, "F"] >> period)
 
 record :: Parser Record
 record = do 
   level <- (decimal :: Parser Int)
-  name  <- word
+  name  <- identifier
   choice 
-    [ RElem  level name <$> (symbolS KPic >> recordFormat <* period)
+    [ RElem  level name <$> (keyword KPic >> recordFormat <* period)
     , RGroup level name <$> (period >> many (recordAbove level))
     ]
   where 
@@ -278,10 +278,10 @@ recordFormat =
     fmtCharItemCount = between (char '(') (char ')') L.decimal
 
     fmtUsage :: Parser RUsage
-    fmtUsage = option RDisplay (RComp3 <$ symbolS KComp3)
+    fmtUsage = option RDisplay (RComp3 <$ keyword KComp3)
 
     fmtInitValue :: Parser (Maybe Value)
-    fmtInitValue = optional (symbolS KValue >> value)
+    fmtInitValue = optional (keyword KValue >> value)
 
 recordFormatChar :: Parser RFmtChar
 recordFormatChar = choice 
@@ -296,12 +296,12 @@ recordFormatChar = choice
 
 procedureDivision :: Parser ProcDiv
 procedureDivision = do
-  _ <- symbolS KProcedure >> symbolS KDivision >> period
+  _ <- keyword KProcedure >> keyword KDivision >> period
   many paragraph
 
 paragraph :: Parser Para
 paragraph = choice 
-  [ Para . Just <$> (word <* period) <*> many sentence
+  [ Para . Just <$> (identifier <* period) <*> many sentence
   , Para Nothing                     <$> many sentence
   ]
 
@@ -313,23 +313,23 @@ statement = choice
   [ displayStatement
   , moveStatement
   , computeStatement
-  , GoBack <$ symbolS KGoback
+  , GoBack <$ keyword KGoback
   , openStatement
   , closeStatement
   , performStatement
   ]
 
 displayStatement :: Parser Statement
-displayStatement = Display <$> (symbolS KDisplay >> some value)
+displayStatement = Display <$> (keyword KDisplay >> some value)
 
 moveStatement :: Parser Statement 
 moveStatement =
-  Move <$> (symbolS KMove >> value)
-       <*> (symbolS KTo >> word)
+  Move <$> (keyword KMove >> value)
+       <*> (keyword KTo >> identifier)
 
 computeStatement :: Parser Statement
 computeStatement = 
-  Compute <$> (symbolS KCompute >> word)
+  Compute <$> (keyword KCompute >> identifier)
           <*> (symbol "=" >> arithmeticExpression)
 
 -- https://www.ibm.com/docs/en/cobol-zos/6.4?topic=structure-arithmetic-expressions
@@ -352,9 +352,9 @@ arithmeticExpression = choice
 
     arithVal :: Parser AVal
     arithVal = choice 
-      [ ANum 0 <$  symbolS KZero 
+      [ ANum 0 <$  keyword KZero 
       , ANum   <$> decimal
-      , AVar   <$> word
+      , AVar   <$> identifier
       ]
     
     arithOp :: Parser AOp
@@ -365,26 +365,26 @@ arithmeticExpression = choice
 
 openStatement :: Parser Statement
 openStatement = 
-  Open <$> (symbolS KOpen >> choice 
-             [ Input  <$ symbolS KInput
-             , Output <$ symbolS KOutput
+  Open <$> (keyword KOpen >> choice 
+             [ Input  <$ keyword KInput
+             , Output <$ keyword KOutput
              ])
-       <*> word
+       <*> identifier
 
 closeStatement :: Parser Statement
-closeStatement = Close <$> (symbolS KClose >> word)
+closeStatement = Close <$> (keyword KClose >> identifier)
 
 performStatement :: Parser Statement
 performStatement = do
-  _ <- symbolS KPerform
+  _ <- keyword KPerform
   untilPhrase <|> simple
   where 
     untilPhrase :: Parser Statement
-    untilPhrase = PerformUntil <$> (symbolS KUntil >> condition)
-                               <*> (many statement <* symbolS KEndPerform)
+    untilPhrase = PerformUntil <$> (keyword KUntil >> condition)
+                               <*> (many statement <* keyword KEndPerform)
     
     simple :: Parser Statement 
-    simple = Perform <$> word
+    simple = Perform <$> identifier
 
 condition :: Parser Cond
 condition = Cond <$> condValue <*> condOp <*> condValue
@@ -395,36 +395,45 @@ condOp = CEq <$ symbol "="
 condValue :: Parser CVal
 condValue = choice 
   [ CStr <$> strLit
-  , CVar <$> word
+  , CVar <$> identifier
   ]
 
 value :: Parser Value
 value = choice 
   [ StrVal     <$> strLit
   , NumVal     <$> decimal
-  , VarVal     <$> word
-  , NumVal 0   <$  symbolS KZero
-  , StrVal " " <$  symbolS KSpace
+  , VarVal     <$> identifier
+  , NumVal 0   <$  keyword KZero
+  , StrVal " " <$  keyword KSpace
   ]
 
-word :: Parser T.Text
-word = try . lexeme $ do
-  w <- rawWord
-  if isKeyword w 
-    then failT ("Expecting word, found Keyword: " <> w) 
-    else pure w
-  where 
-    rawWord :: Parser T.Text
-    rawWord = T.cons <$> first <*> rest
+keywords :: [Keyword] -> Parser [Keyword]
+keywords = traverse keyword
 
+keyword :: Keyword -> Parser Keyword
+keyword k = try . lexeme $ (k <$ keywordText) 
+  where 
+    keywordText :: Parser T.Text
+    keywordText = chunk (showT k) <* notFollowedBy (satisfy isIdentifierChar)
+
+identifier :: Parser T.Text
+identifier = try $ do
+  w <- word
+  if isKeyword w 
+    then failT ("Expecting identifier, found keyword: " <> w) 
+    else pure w
+
+word :: Parser T.Text
+word = try . lexeme $ (T.cons <$> first <*> rest) 
+  where 
     first :: Parser Char
     first = satisfy isAlpha
 
     rest :: Parser T.Text
-    rest = takeWhile1P (Just "<identifier-char>") validIdentifierChar
+    rest = takeWhile1P (Just "<identifier-char>") isIdentifierChar
 
-    validIdentifierChar :: Char -> Bool
-    validIdentifierChar c = isAlphaNum c || c == '-'
+isIdentifierChar :: Char -> Bool
+isIdentifierChar c = isAlphaNum c || c == '-' 
 
 period :: Parser ()
 period = lexeme . void $ char '.'
