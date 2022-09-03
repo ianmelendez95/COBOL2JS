@@ -31,7 +31,13 @@ import qualified Text.Megaparsec.Char.Lexer as L
 
 import COBOL.Keyword
 
-import Debug.Trace
+-- import Debug.Trace
+
+trace :: String -> a -> a
+trace _ = id
+
+traceM :: Applicative m => String -> m ()
+traceM _ = pure ()
 
 type Parser = Parsec Void T.Text
 
@@ -204,6 +210,7 @@ prog = do
 
 identificationDivision :: Parser IdentDiv
 identificationDivision = do
+  traceM "IDENT"
   _ <- keyword KIdentification >> keyword KDivision >> period
   IdentDiv <$> programId <*> option "" author
   where 
@@ -215,6 +222,7 @@ identificationDivision = do
 
 environmentDivision :: Parser EnvDiv
 environmentDivision = do
+  traceM "ENV"
   _ <- keywords [KEnvironment, KDivision] >> period
   _ <- keywords [KInputOutput, KSection ] >> period
   _ <- keyword KFileControl >> period
@@ -227,6 +235,7 @@ environmentDivision = do
 
 dataDivision :: Parser DataDiv
 dataDivision = do 
+  traceM "DATA"
   _ <- keywords [KData, KDivision] >> period
   DataDiv <$> option mempty fileSection 
           <*> option mempty storageSection
@@ -302,29 +311,30 @@ recordFormatChar = choice
 
 procedureDivision :: Parser ProcDiv
 procedureDivision = do
+  traceM "PROC"
   _ <- keyword KProcedure >> keyword KDivision >> period
   many paragraph
 
 paragraph :: Parser Para
-paragraph = choice 
-  [ Para . Just <$> (identifier <* period) <*> many sentence
-  , Para Nothing                     <$> many sentence
+paragraph = traceM "BEG PARAS" >> choice 
+  [ Para . Just <$> (identifier <* period) <*> (traceM "PARA NAMED" >> some sentence)
+  , Para Nothing                     <$> (traceM "PARA ANON" >> some sentence)
   ]
 
 sentence :: Parser [Statement]
-sentence = many statement <* period
+sentence = some statement <* period
 
 statement :: Parser Statement
 statement = choice 
-  [ displayStatement
-  , moveStatement
-  , computeStatement
-  , GoBack <$ keyword KGoback
-  , openStatement
-  , closeStatement
-  , readStatement
-  , writeStatement
-  , performStatement
+  [ traceM "disp"   >> displayStatement
+  , traceM "move"   >> moveStatement
+  , traceM "comp"   >> computeStatement
+  , traceM "goback" >> GoBack <$ keyword KGoback
+  , traceM "open"   >> openStatement
+  , traceM "close"  >> closeStatement
+  , traceM "read"   >> readStatement
+  , traceM "write"  >> writeStatement
+  , traceM "perf"   >> performStatement
   ]
 
 displayStatement :: Parser Statement
@@ -396,14 +406,14 @@ writeStatement = Write <$> (keyword KWrite >> identifier)
 performStatement :: Parser Statement
 performStatement = do
   _ <- keyword KPerform
-  untilPhrase <|> simple
+  (traceM "until" >> untilPhrase) <|> (traceM "simple" >> simple)
   where 
     untilPhrase :: Parser Statement
     untilPhrase = PerformUntil <$> (keyword KUntil >> condition)
-                               <*> (many statement <* keyword KEndPerform)
+                               <*> (many statement <* (keyword KEndPerform >> traceM "found end-perform"))
     
     simple :: Parser Statement 
-    simple = Perform <$> identifier
+    simple = Perform <$> (traceM "simple-ident" >> identifier)
 
 condition :: Parser Cond
 condition = Cond <$> condValue <*> condOp <*> condValue
@@ -498,3 +508,6 @@ showT = T.pack . show
 
 failT :: MonadFail m => T.Text -> m a
 failT = fail . T.unpack
+
+traceP :: Monad m => String -> m a -> m a
+traceP msg p = p >>= (trace msg . pure)
