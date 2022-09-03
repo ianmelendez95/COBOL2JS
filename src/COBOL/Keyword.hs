@@ -43,6 +43,8 @@ data Keyword = KDivision
              | KClose
              | KInput
              | KOutput
+             | KRead 
+             | KWrite
              | KDisplay 
              | KMove 
              | KTo 
