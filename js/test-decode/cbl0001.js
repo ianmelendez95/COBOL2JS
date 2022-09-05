@@ -3,6 +3,27 @@
 const fs = require('node:fs')
 const { Buffer } = require('node:buffer')
 
+// File Descriptors
+
+function FileDescriptor(fileName) {
+}
+
+function initFileDesc(fileParser, varSpec) {
+
+}
+
+function fdRead(fileDescriptor) {
+
+}
+
+// Read Text
+
+function readText(fd, length) {
+  let b = Buffer.alloc(length)
+  fs.readSync(fd, b, 0, length)
+  return decodeEBCDICBuffer(b)
+}
+
 const EBCDIC_MAP = buildEBCDICMap()
 
 function buildEBCDICMap() {
@@ -61,7 +82,6 @@ function buildEBCDICMap() {
   return map
 }
 
-
 function decodeEBCDICBuffer(buffer) {
   return buffer.map(decodeEBCDICByte).join("")
 }
@@ -73,55 +93,6 @@ function decodeEBCDICByte(byte) {
   } else {
     return c
   }
-}
-
-function FileDescriptor(fileName) {
-
-}
-
-let printLine = new FileDescriptor("PRTLINE")
-let acctRec = new FileDescriptor("ACCTREC")
-
-function initFileDesc(fileParser, varSpec) {
-
-}
-
-let printRec = initFileDesc(printLine, [
-  { name: "acctNo0", length: 8, type: "string" },
-  { name: "acctLimit0", length: 13, type: "string" },
-  { name: "acctBalance0", length: 13, type: "string" },
-  { name: "lastName0", length: 20, type: "string" },
-  { name: "firstName0", length: 15, type: "string" },
-  { name: "comments0", length: 50, type: "string" }
-])
-
-let acctFields = initFileDesc(acctRec, [
-  { name: "acctNo", length: 8, type: "string" },
-  { name: "acctLimit", length: 11, type: "binary-decimal" },
-  { name: "acctBalance", length: 11, type: "binary-decimal" },
-  { name: "lastName", length: 20, type: "string" },
-  { name: "firstName", length: 15, type: "string" },
-  { 
-    name: "clientAddr", 
-    children: [
-      { name: "streetAddr", length: 25, type: "string" },
-      { name: "cityCounty", length: 20, type: "string" },
-      { name: "usaState", length: 15, type: "string" }
-    ]
-  },
-  { name: "comments0", length: 50, type: "string" }
-])
-
-function concatArrays(arrs) {
-  return arrs.reduce((res, arr) => res.concat(arr), [])
-}
-
-// Read Text
-
-function readText(fd, length) {
-  let b = Buffer.alloc(length)
-  fs.readSync(fd, b, 0, length)
-  return decodeEBCDICBuffer(b)
 }
 
 // Read Packed Decimals
@@ -167,11 +138,73 @@ function decodePackedDecimalDigitPair(packedNum) {
   return [first, second]
 }
 
+// BEGIN PROGRAM
+
+let printLine = new FileDescriptor("PRTLINE")
+let acctRec = new FileDescriptor("ACCTREC")
+
+let printRec = initFileDesc(printLine, [
+  { name: "acctNo0", length: 8, type: "string" },
+  { name: "acctLimit0", length: 13, type: "string" },
+  { name: "acctBalance0", length: 13, type: "string" },
+  { name: "lastName0", length: 20, type: "string" },
+  { name: "firstName0", length: 15, type: "string" },
+  { name: "comments0", length: 50, type: "string" }
+])
+
+let acctFields = initFileDesc(acctRec, [
+  { 
+    name: "acctNo", 
+    type: "string",
+    length: 8
+  }, { 
+    name: "acctLimit", 
+    type: "binary-decimal", 
+    length: 5,
+    wholeDigits: 7
+  }, { 
+    name: "acctBalance", 
+    type: "binary-decimal",
+    length: 5, 
+    wholeDigits: 7
+  }, { 
+    name: "lastName", 
+    type: "string",
+    length: 20
+  }, { 
+    name: "firstName", 
+    type: "string",
+    length: 15 
+  }, { 
+    name: "clientAddr", 
+    type: "compound",
+    children: [
+      { 
+        name: "streetAddr", 
+        length: 25, 
+        type: "string" 
+      }, { 
+        name: "cityCounty", 
+        length: 20, 
+        type: "string" 
+      }, { 
+        name: "usaState", 
+        length: 15, 
+        type: "string" 
+      }
+    ]
+  }, { 
+    name: "comments0", 
+    length: 50, 
+    type: "string" 
+  }
+])
+
 let fd = fs.openSync("data")
 
 console.log("Text 1:", readText(fd, 8))
 console.log("Dec 1: ", readPackedDecimal(fd, 5, 7))
 
-// console.log(decimalFromDigits([1,2,3]))
+acctRec.__read__()
 
 fs.closeSync(fd)
