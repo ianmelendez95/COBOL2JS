@@ -288,6 +288,10 @@ acctRec.loadVarSpec([
           }
         ]
       }, {
+        name: "reserved",
+        length: 7,
+        type: "string"
+      }, {
         name: "comments0",
         length: 50,
         type: "string"
