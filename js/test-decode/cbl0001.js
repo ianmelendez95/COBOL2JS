@@ -7,8 +7,16 @@ const { Buffer } = require('node:buffer')
 
 function FileDescriptor(fileName) {
   this.fileName = fileName
-  this.fd = fs.openSync(fileName)
+  this.fd = undefined
   this.varSpec = undefined
+
+  this.open = function () {
+    this.fd = fs.openSync(this.fileName)
+  }
+
+  this.close = function () {
+    fs.closeSync(this.fd)
+  }
 
   this.read = function () {
     this.data = readVarSpec(this.fd, this.varSpec)
@@ -307,10 +315,14 @@ acctRec.loadVarSpec([
 
 // fs.closeSync(fd)
 
+acctRec.open()
+
 acctRec.read()
 console.log("DATA 1:", acctRec.data)
 
 acctRec.read()
 console.log("DATA 2:", acctRec.data)
+
+acctRec.close()
 
 acctRec.data.acctFields.acctNo
