@@ -10,8 +10,8 @@ function FileDescriptor(fileName) {
   this.fd = undefined
   this.varSpec = undefined
 
-  this.open = function () {
-    this.fd = fs.openSync(this.fileName)
+  this.open = function (flags) {
+    this.fd = fs.openSync(this.fileName, flags)
   }
 
   this.close = function () {
@@ -28,16 +28,35 @@ function FileDescriptor(fileName) {
 
   this.loadVarSpec = function (varSpec) {
     this.varSpec = varSpec
+    this.data = newObjFromVarSpec(varSpec)
+  }
+}
+
+function newObjFromVarSpec(varSpec) {
+  let obj = {}
+  for (spec of varSpec) {
+    obj[spec.name] = newObjFromVarSpecItem(spec)
+  }
+  return obj
+}
+
+function newObjFromVarSpecItem(specItem) {
+  if (specItem.type === 'string') {
+    return ''
+  } else if (specItem.type === 'binary-decimal') {
+    return 0
+  } else if (specItem.type === 'compound') {
+    return newObjFromVarSpec(specItem.children)
+  } else {
+    throw new Error("Unrecognized var spec: " + specItem.type)
   }
 }
 
 function readVarSpec(fd, varSpec) {
   let obj = {}
-
   for (spec of varSpec) {
     obj[spec.name] = readVarSpecItem(fd, spec)
   }
-
   return obj
 }
 
@@ -70,12 +89,12 @@ function writeVarSpecItem(fd, specItem, data) {
 }
 
 function writeText(fd, length, text) {
-  fd.writeSync(fd, leftPad(length, text))
+  fs.writeSync(fd, leftPad(length, text))
 }
 
-function leftPad(str, len) {
+function leftPad(len, str) {
   if (len <= str.length) {
-    return
+    return str
   }
 
   return ' '.repeat(len - str.length) + str
@@ -242,12 +261,18 @@ let printLine = new FileDescriptor("js/test-decode/PRTLINE")
 let acctRec = new FileDescriptor("js/test-decode/ACCTREC")
 
 printLine.loadVarSpec([
-  { name: "acctNo0", length: 8, type: "string" },
-  { name: "acctLimit0", length: 13, type: "string" },
-  { name: "acctBalance0", length: 13, type: "string" },
-  { name: "lastName0", length: 20, type: "string" },
-  { name: "firstName0", length: 15, type: "string" },
-  { name: "comments0", length: 50, type: "string" }
+  {
+    name: "printRec",
+    type: "compound",
+    children: [
+      { name: "acctNoO" , length: 8, type: "string" },
+      { name: "acctLimitO" , length: 13, type: "string" },
+      { name: "acctBalanceO" , length: 13, type: "string" },
+      { name: "lastNameO" , length: 20, type: "string" },
+      { name: "firstNameO" , length: 15, type: "string" },
+      { name: "commentsO" , length: 50, type: "string" }
+    ]
+  }
 ])
 
 acctRec.loadVarSpec([
@@ -255,55 +280,22 @@ acctRec.loadVarSpec([
     name: "acctFields",
     type: "compound",
     children: [
+      {  name: "acctNo", type: "string", length: 8 },
+      {  name: "acctLimit", type: "binary-decimal", length: 5, wholeDigits: 7 },
+      {  name: "acctBalance", type: "binary-decimal", length: 5, wholeDigits: 7 },
+      {  name: "lastName", type: "string", length: 20 },
+      {  name: "firstName", type: "string", length: 15 },
       {
-        name: "acctNo",
-        type: "string",
-        length: 8
-      }, {
-        name: "acctLimit",
-        type: "binary-decimal",
-        length: 5,
-        wholeDigits: 7
-      }, {
-        name: "acctBalance",
-        type: "binary-decimal",
-        length: 5,
-        wholeDigits: 7
-      }, {
-        name: "lastName",
-        type: "string",
-        length: 20
-      }, {
-        name: "firstName",
-        type: "string",
-        length: 15
-      }, {
         name: "clientAddr",
         type: "compound",
         children: [
-          {
-            name: "streetAddr",
-            length: 25,
-            type: "string"
-          }, {
-            name: "cityCounty",
-            length: 20,
-            type: "string"
-          }, {
-            name: "usaState",
-            length: 15,
-            type: "string"
-          }
+          {  name: "streetAddr", length: 25, type: "string" },
+          {  name: "cityCounty", length: 20, type: "string" },
+          {  name: "usaState", length: 15, type: "string" }
         ]
-      }, {
-        name: "reserved",
-        length: 7,
-        type: "string"
-      }, {
-        name: "comments0",
-        length: 50,
-        type: "string"
-      }
+      }, 
+      { name: "reserved", length: 7, type: "string" }, 
+      { name: "comments", length: 50, type: "string" }
     ]
   }
 ])
@@ -315,14 +307,19 @@ acctRec.loadVarSpec([
 
 // fs.closeSync(fd)
 
-acctRec.open()
+acctRec.open('r')
+printLine.open('a')
 
 acctRec.read()
 console.log("DATA 1:", acctRec.data)
 
-acctRec.read()
-console.log("DATA 2:", acctRec.data)
+printLine.data.printRec.acctNoO      = acctRec.data.acctFields.acctNo
+printLine.data.printRec.acctLimitO   = acctRec.data.acctFields.acctLimit
+printLine.data.printRec.acctBalanceO = acctRec.data.acctFields.acctBalance
+printLine.data.printRec.lastNameO    = acctRec.data.acctFields.lastName
+printLine.data.printRec.firstNameO   = acctRec.data.acctFields.firstName
+printLine.data.printRec.commentsO    = acctRec.data.acctFields.comments
+
+printLine.write()
 
 acctRec.close()
-
-acctRec.data.acctFields.acctNo
