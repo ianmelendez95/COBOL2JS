@@ -80,7 +80,7 @@ function writeVarSpec(fd, varSpec, data) {
 
 function writeVarSpecItem(fd, specItem, data) {
   if (specItem.type === 'string') {
-    return writeText(fd, specItem.length, data)
+    return writeText(fd, specItem.length, data.toString())
   } else if (specItem.type === 'compound') {
     return writeVarSpec(fd, specItem.children, data)
   } else {
