@@ -173,7 +173,7 @@ function buildEBCDICMap() {
 }
 
 function decodeEBCDICBuffer(buffer) {
-  return buffer.map(decodeEBCDICByte).join("")
+  return [...buffer].map(decodeEBCDICByte).join("")
 }
 
 function decodeEBCDICByte(byte) {
@@ -230,8 +230,8 @@ function decodePackedDecimalDigitPair(packedNum) {
 
 // BEGIN PROGRAM
 
-let printLine = new FileDescriptor("PRTLINE")
-let acctRec = new FileDescriptor("ACCTREC")
+let printLine = new FileDescriptor("js/test-decode/PRTLINE")
+let acctRec = new FileDescriptor("js/test-decode/ACCTREC")
 
 printLine.loadVarSpec([
   { name: "acctNo0", length: 8, type: "string" },
@@ -304,5 +304,9 @@ acctRec.loadVarSpec([
 // fs.closeSync(fd)
 
 acctRec.read()
-console.log("DATA:", acctRec.data)
+console.log("DATA 1:", acctRec.data)
+
+acctRec.read()
+console.log("DATA 2:", acctRec.data)
+
 acctRec.data.acctFields.acctNo
