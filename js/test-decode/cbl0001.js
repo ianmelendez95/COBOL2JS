@@ -86,6 +86,7 @@ const EBCDIC_MAP = buildEBCDICMap()
 function buildEBCDICMap() {
   const map = new Map()
 
+  map.set(0x40, ' ')
   map.set(0x4B, '.')
   map.set(0x4E, '+')
 
@@ -115,15 +116,47 @@ function buildEBCDICMap() {
   map.set(0x98, 'q')
   map.set(0x99, 'r')
 
-  map.set(0xa1, '~')
-  map.set(0xa2, 's')
-  map.set(0xa3, 't')
-  map.set(0xa4, 'u')
-  map.set(0xa5, 'v')
-  map.set(0xa6, 'w')
-  map.set(0xa7, 'x')
-  map.set(0xa8, 'y')
-  map.set(0xa9, 'z')
+  map.set(0xA1, '~')
+  map.set(0xA2, 's')
+  map.set(0xA3, 't')
+  map.set(0xA4, 'u')
+  map.set(0xA5, 'v')
+  map.set(0xA6, 'w')
+  map.set(0xA7, 'x')
+  map.set(0xA8, 'y')
+  map.set(0xA9, 'z')
+
+  map.set(0xC0, '{')
+  map.set(0xC1, 'A')
+  map.set(0xC2, 'B')
+  map.set(0xC3, 'C')
+  map.set(0xC4, 'D')
+  map.set(0xC5, 'E')
+  map.set(0xC6, 'F')
+  map.set(0xC7, 'G')
+  map.set(0xC8, 'H')
+  map.set(0xC9, 'I')
+
+  map.set(0xD0, '}')
+  map.set(0xD1, 'J')
+  map.set(0xD2, 'K')
+  map.set(0xD3, 'L')
+  map.set(0xD4, 'M')
+  map.set(0xD5, 'N')
+  map.set(0xD6, 'O')
+  map.set(0xD7, 'P')
+  map.set(0xD8, 'Q')
+  map.set(0xD9, 'R')
+                 
+  map.set(0xE0, '\\')
+  map.set(0xE2, 'S')
+  map.set(0xE3, 'T')
+  map.set(0xE4, 'U')
+  map.set(0xE5, 'V')
+  map.set(0xE6, 'W')
+  map.set(0xE7, 'X')
+  map.set(0xE8, 'Y')
+  map.set(0xE9, 'Z')
 
   map.set(0xF0, '0')
   map.set(0xF1, '1')
@@ -146,7 +179,7 @@ function decodeEBCDICBuffer(buffer) {
 function decodeEBCDICByte(byte) {
   const c = EBCDIC_MAP.get(byte)
   if (c == undefined) {
-    throw new Error("Unable to decode byte: " + byte.toString())
+    throw new Error("Unable to decode byte: " + byte.toString(16))
   } else {
     return c
   }
