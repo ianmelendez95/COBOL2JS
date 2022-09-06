@@ -6,14 +6,71 @@ const { Buffer } = require('node:buffer')
 // File Descriptors
 
 function FileDescriptor(fileName) {
+  this.fileName = fileName
+  this.fd = fs.openSync(fileName)
+  this.varSpec = undefined
+
+  this.read = function () {
+    this.data = readVarSpec(this.fd, this.varSpec)
+  }
+
+  this.write = function () {
+    writeVarSpec(this.fd, this.varSpec, this.data)
+  }
+
+  this.loadVarSpec = function (varSpec) {
+    this.varSpec = varSpec
+  }
 }
 
-function initFileDesc(fileParser, varSpec) {
+function readVarSpec(fd, varSpec) {
+  let obj = {}
 
+  for (spec of varSpec) {
+    obj[spec.name] = readVarSpecItem(fd, spec)
+  }
+
+  return obj
 }
 
-function fdRead(fileDescriptor) {
+function readVarSpecItem(fd, specItem) {
+  if (specItem.type === 'string') {
+    return readText(fd, specItem.length)
+  } else if (specItem.type === 'binary-decimal') {
+    return readPackedDecimal(fd, specItem.length, specItem.wholeDigits)
+  } else if (specItem.type === 'compound') {
+    return readVarSpec(fd, specItem.children)
+  } else {
+    throw new Error("Unrecognized var spec: " + specItem.type)
+  }
+}
 
+function writeVarSpec(fd, varSpec, data) {
+  for (spec of varSpec) {
+    writeVarSpecItem(fd, spec, data[spec.name])
+  }
+}
+
+function writeVarSpecItem(fd, specItem, data) {
+  if (specItem.type === 'string') {
+    return writeText(fd, specItem.length, data)
+  } else if (specItem.type === 'compound') {
+    return writeVarSpec(fd, specItem.children, data)
+  } else {
+    throw new Error("Unrecognized var spec: " + specItem.type)
+  }
+}
+
+function writeText(fd, length, text) {
+  fd.writeSync(fd, leftPad(length, text))
+}
+
+function leftPad(str, len) {
+  if (len <= str.length) {
+    return
+  }
+
+  return ' '.repeat(len - str.length) + str
 }
 
 // Read Text
@@ -97,26 +154,26 @@ function decodeEBCDICByte(byte) {
 
 // Read Packed Decimals
 
-function readPackedDecimal(fd, length, wholePartLength) {
+function readPackedDecimal(fd, length, wholeDigits) {
   let b = Buffer.alloc(length)
   fs.readSync(fd, b, length)
   let ds = decodePackedDecimalDigits(b)
-  return decimalFromPackedDigits(ds, wholePartLength)
+  return decimalFromPackedDigits(ds, wholeDigits)
 }
 
 // http://www.3480-3590-data-conversion.com/article-packed-fields.html
-function decimalFromPackedDigits(digits, wholePartLength) {
+function decimalFromPackedDigits(digits, wholeDigits) {
   let numDigitsLength = digits.length - 1  // last digit is actually the 'sign'
 
-  if (wholePartLength > (digits.length - 1)) {
+  if (wholeDigits > (digits.length - 1)) {
     throw new Error('Whole Part of packed decimal is longer than provided digits')
-  } else if (wholePartLength == digits.length) {
+  } else if (wholeDigits == digits.length) {
     return parseInt(digits.join(''))
   } 
 
-  let wholePartStr = digits.slice(0, wholePartLength).join('')
-  let decPartStr = digits.slice(wholePartLength, numDigitsLength).join('')
-  let sign = wholePartLength == 0xD ? '-' : ''
+  let wholePartStr = digits.slice(0, wholeDigits).join('')
+  let decPartStr = digits.slice(wholeDigits, numDigitsLength).join('')
+  let sign = wholeDigits == 0xD ? '-' : ''
 
   let numStr = sign + wholePartStr + '.' + decPartStr
 
@@ -143,7 +200,7 @@ function decodePackedDecimalDigitPair(packedNum) {
 let printLine = new FileDescriptor("PRTLINE")
 let acctRec = new FileDescriptor("ACCTREC")
 
-let printRec = initFileDesc(printLine, [
+printLine.loadVarSpec([
   { name: "acctNo0", length: 8, type: "string" },
   { name: "acctLimit0", length: 13, type: "string" },
   { name: "acctBalance0", length: 13, type: "string" },
@@ -152,59 +209,67 @@ let printRec = initFileDesc(printLine, [
   { name: "comments0", length: 50, type: "string" }
 ])
 
-let acctFields = initFileDesc(acctRec, [
+acctRec.loadVarSpec([
   { 
-    name: "acctNo", 
-    type: "string",
-    length: 8
-  }, { 
-    name: "acctLimit", 
-    type: "binary-decimal", 
-    length: 5,
-    wholeDigits: 7
-  }, { 
-    name: "acctBalance", 
-    type: "binary-decimal",
-    length: 5, 
-    wholeDigits: 7
-  }, { 
-    name: "lastName", 
-    type: "string",
-    length: 20
-  }, { 
-    name: "firstName", 
-    type: "string",
-    length: 15 
-  }, { 
-    name: "clientAddr", 
+    name: "acctFields",
     type: "compound",
     children: [
-      { 
-        name: "streetAddr", 
-        length: 25, 
-        type: "string" 
-      }, { 
-        name: "cityCounty", 
-        length: 20, 
-        type: "string" 
-      }, { 
-        name: "usaState", 
-        length: 15, 
-        type: "string" 
+      {
+        name: "acctNo",
+        type: "string",
+        length: 8
+      }, {
+        name: "acctLimit",
+        type: "binary-decimal",
+        length: 5,
+        wholeDigits: 7
+      }, {
+        name: "acctBalance",
+        type: "binary-decimal",
+        length: 5,
+        wholeDigits: 7
+      }, {
+        name: "lastName",
+        type: "string",
+        length: 20
+      }, {
+        name: "firstName",
+        type: "string",
+        length: 15
+      }, {
+        name: "clientAddr",
+        type: "compound",
+        children: [
+          {
+            name: "streetAddr",
+            length: 25,
+            type: "string"
+          }, {
+            name: "cityCounty",
+            length: 20,
+            type: "string"
+          }, {
+            name: "usaState",
+            length: 15,
+            type: "string"
+          }
+        ]
+      }, {
+        name: "comments0",
+        length: 50,
+        type: "string"
       }
     ]
-  }, { 
-    name: "comments0", 
-    length: 50, 
-    type: "string" 
   }
 ])
 
-let fd = fs.openSync("data")
+// let fd = fs.openSync("data")
 
-console.log("Text 1:", readText(fd, 8))
-console.log("Dec 1: ", readPackedDecimal(fd, 5, 7))
+// console.log("Text 1:", readText(fd, 8))
+// console.log(" Dec 1:", readPackedDecimal(fd, 5, 7))
 
-acctRec.__read__()
+// fs.closeSync(fd)
 
-fs.closeSync(fd)
+acctRec.read()
+console.log("DATA:", acctRec.data)
+acctRec.data.acctFields.acctNo
