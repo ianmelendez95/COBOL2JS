@@ -3,6 +3,8 @@
 const fs = require('node:fs')
 const { Buffer } = require('node:buffer')
 
+const READ_EOF = "READ-EOF"
+
 // File Descriptors
 
 function FileDescriptor(fileName) {
@@ -18,8 +20,14 @@ function FileDescriptor(fileName) {
     fs.closeSync(this.fd)
   }
 
-  this.read = function () {
-    this.data = readVarSpec(this.fd, this.varSpec)
+  this.read = function (atEnd) {
+    try {
+      this.data = readVarSpec(this.fd, this.varSpec)
+    } catch (e) {
+      if (e.message === READ_EOF) {
+        atEnd()
+      }
+    }
   }
 
   this.write = function () {
@@ -103,9 +111,7 @@ function leftPad(len, str) {
 // Read Text
 
 function readText(fd, length) {
-  let b = Buffer.alloc(length)
-  fs.readSync(fd, b, 0, length)
-  return decodeEBCDICBuffer(b)
+  return decodeEBCDICBuffer(_read(fd, length))
 }
 
 const EBCDIC_MAP = buildEBCDICMap()
@@ -119,9 +125,14 @@ function buildEBCDICMap() {
 
   map.set(0x5B, '$')
 
+  map.set(0x60, '-')
   map.set(0x6B, ',')
   map.set(0x6C, '%')
   map.set(0x6D, '_')
+
+  map.set(0x7D, '\'')
+  map.set(0x7E, '=')
+  map.set(0x7F, '"')
 
   map.set(0x81, 'a')
   map.set(0x82, 'b')
@@ -206,7 +217,8 @@ function decodeEBCDICBuffer(buffer) {
 function decodeEBCDICByte(byte) {
   const c = EBCDIC_MAP.get(byte)
   if (c == undefined) {
-    throw new Error("Unable to decode byte: " + byte.toString(16))
+    console.error("Unable to decode byte: " + byte.toString(16))
+    return '?'
   } else {
     return c
   }
@@ -215,9 +227,7 @@ function decodeEBCDICByte(byte) {
 // Read Packed Decimals
 
 function readPackedDecimal(fd, length, wholeDigits) {
-  let b = Buffer.alloc(length)
-  fs.readSync(fd, b, length)
-  let ds = decodePackedDecimalDigits(b)
+  let ds = decodePackedDecimalDigits(_read(fd, length))
   return decimalFromPackedDigits(ds, wholeDigits)
 }
 
@@ -255,10 +265,41 @@ function decodePackedDecimalDigitPair(packedNum) {
   return [first, second]
 }
 
+/**
+ * @returns Buffer containing the read content
+ */
+function _read(fd, length) {
+  let b = Buffer.alloc(length)
+  const bytesRead = fs.readSync(fd, b, 0, length)
+  if (bytesRead === 0) {
+    throw new Error("READ-EOF")
+  } else if (bytesRead < length) {
+    throw new Error("ERROR: Asked to read " + length + " bytes but only read " + bytesRead)
+  }
+  return b
+}
+
+// Program Executor
+
+function _runProcedures(procedures) {
+  for (proc of procedures) {
+    let procRes = proc()
+
+    if (procRes === 'GOBACK') {
+      console.log("TRACE asked to 'go back'")
+      break;
+    }
+  }
+}
+
 // BEGIN PROGRAM
+
+// ENVIRONMENT DIVISION
 
 let printLine = new FileDescriptor("js/test-decode/PRTLINE")
 let acctRec = new FileDescriptor("js/test-decode/ACCTREC")
+
+// DATA DIVISION
 
 printLine.loadVarSpec([
   {
@@ -300,26 +341,58 @@ acctRec.loadVarSpec([
   }
 ])
 
-// let fd = fs.openSync("data")
+let flags = { lastRec: ' ' }
 
-// console.log("Text 1:", readText(fd, 8))
-// console.log(" Dec 1:", readPackedDecimal(fd, 5, 7))
+// PROCEDURE DIVISION
 
-// fs.closeSync(fd)
+function openFiles() {
+  console.log("TRACE openFiles")
+  acctRec.open('r')
+  printLine.open('a')
+}
 
-acctRec.open('r')
-printLine.open('a')
+function readNextRecord() {
+  console.log("TRACE readNextRecord")
+  readRecord()
+  while (!(flags.lastRec == 'Y')) {
+    writeRecord()
+    readRecord()
+  }
+}
 
-acctRec.read()
-console.log("DATA 1:", acctRec.data)
+function closeStop() {
+  console.log("TRACE closeStop")
+  acctRec.close()
+  printLine.close()
+  return 'GOBACK'
+}
 
-printLine.data.printRec.acctNoO      = acctRec.data.acctFields.acctNo
-printLine.data.printRec.acctLimitO   = acctRec.data.acctFields.acctLimit
-printLine.data.printRec.acctBalanceO = acctRec.data.acctFields.acctBalance
-printLine.data.printRec.lastNameO    = acctRec.data.acctFields.lastName
-printLine.data.printRec.firstNameO   = acctRec.data.acctFields.firstName
-printLine.data.printRec.commentsO    = acctRec.data.acctFields.comments
+function readRecord() {
+  console.log("TRACE readRecord")
+  acctRec.read(function () {
+    flags.lastRec = 'Y'
+  })
+}
 
-printLine.write()
+function writeRecord() {
+  console.log("TRACE writeRecord")
+  printLine.data.printRec.acctNoO      = acctRec.data.acctFields.acctNo
+  printLine.data.printRec.acctLimitO   = acctRec.data.acctFields.acctLimit
+  printLine.data.printRec.acctBalanceO = acctRec.data.acctFields.acctBalance
+  printLine.data.printRec.lastNameO    = acctRec.data.acctFields.lastName
+  printLine.data.printRec.firstNameO   = acctRec.data.acctFields.firstName
+  printLine.data.printRec.commentsO    = acctRec.data.acctFields.comments
+  printLine.write()
+}
 
-acctRec.close()
+// PROGRAM EXECUTION
+
+const __PROCEDURES__ = [
+  openFiles,
+  readNextRecord,
+  closeStop,
+  readRecord,
+  writeRecord
+]
+
+_runProcedures(__PROCEDURES__)
