@@ -3,7 +3,7 @@
 const fs = require('node:fs')
 const { Buffer } = require('node:buffer')
 
-const READ_EOF = "READ-EOF"
+const _READ_EOF = "READ-EOF"
 
 // File Descriptors
 
@@ -22,85 +22,85 @@ function FileDescriptor(fileName) {
 
   this.read = function (atEnd) {
     try {
-      this.data = readVarSpec(this.fd, this.varSpec)
+      this.data = _readVarSpec(this.fd, this.varSpec)
     } catch (e) {
-      if (e.message === READ_EOF) {
+      if (e.message === _READ_EOF) {
         atEnd()
       }
     }
   }
 
   this.write = function () {
-    writeVarSpec(this.fd, this.varSpec, this.data)
+    _writeVarSpec(this.fd, this.varSpec, this.data)
   }
 
   this.loadVarSpec = function (varSpec) {
     this.varSpec = varSpec
-    this.data = newObjFromVarSpec(varSpec)
+    this.data = _newObjFromVarSpec(varSpec)
   }
 }
 
-function newObjFromVarSpec(varSpec) {
+function _newObjFromVarSpec(varSpec) {
   let obj = {}
   for (spec of varSpec) {
-    obj[spec.name] = newObjFromVarSpecItem(spec)
+    obj[spec.name] = _newObjFromVarSpecItem(spec)
   }
   return obj
 }
 
-function newObjFromVarSpecItem(specItem) {
+function _newObjFromVarSpecItem(specItem) {
   if (specItem.type === 'string') {
     return ''
   } else if (specItem.type === 'binary-decimal') {
     return 0
   } else if (specItem.type === 'compound') {
-    return newObjFromVarSpec(specItem.children)
+    return _newObjFromVarSpec(specItem.children)
   } else {
     throw new Error("Unrecognized var spec: " + specItem.type)
   }
 }
 
-function readVarSpec(fd, varSpec) {
+function _readVarSpec(fd, varSpec) {
   let obj = {}
   for (spec of varSpec) {
-    obj[spec.name] = readVarSpecItem(fd, spec)
+    obj[spec.name] = _readVarSpecItem(fd, spec)
   }
   return obj
 }
 
-function readVarSpecItem(fd, specItem) {
+function _readVarSpecItem(fd, specItem) {
   if (specItem.type === 'string') {
-    return readText(fd, specItem.length)
+    return _readText(fd, specItem.length)
   } else if (specItem.type === 'binary-decimal') {
-    return readPackedDecimal(fd, specItem.length, specItem.wholeDigits)
+    return _readPackedDecimal(fd, specItem.length, specItem.wholeDigits)
   } else if (specItem.type === 'compound') {
-    return readVarSpec(fd, specItem.children)
+    return _readVarSpec(fd, specItem.children)
   } else {
     throw new Error("Unrecognized var spec: " + specItem.type)
   }
 }
 
-function writeVarSpec(fd, varSpec, data) {
+function _writeVarSpec(fd, varSpec, data) {
   for (spec of varSpec) {
-    writeVarSpecItem(fd, spec, data[spec.name])
+    _writeVarSpecItem(fd, spec, data[spec.name])
   }
 }
 
-function writeVarSpecItem(fd, specItem, data) {
+function _writeVarSpecItem(fd, specItem, data) {
   if (specItem.type === 'string') {
-    return writeText(fd, specItem.length, data.toString())
+    return _writeText(fd, specItem.length, data.toString())
   } else if (specItem.type === 'compound') {
-    return writeVarSpec(fd, specItem.children, data)
+    return _writeVarSpec(fd, specItem.children, data)
   } else {
     throw new Error("Unrecognized var spec: " + specItem.type)
   }
 }
 
-function writeText(fd, length, text) {
-  fs.writeSync(fd, leftPad(length, text))
+function _writeText(fd, length, text) {
+  fs.writeSync(fd, _leftPad(length, text))
 }
 
-function leftPad(len, str) {
+function _leftPad(len, str) {
   if (len <= str.length) {
     return str
   }
@@ -110,13 +110,13 @@ function leftPad(len, str) {
 
 // Read Text
 
-function readText(fd, length) {
-  return decodeEBCDICBuffer(_read(fd, length))
+function _readText(fd, length) {
+  return _decodeEBCDICBuffer(_read(fd, length))
 }
 
-const EBCDIC_MAP = buildEBCDICMap()
+const EBCDIC_MAP = _buildEBCDICMap()
 
-function buildEBCDICMap() {
+function _buildEBCDICMap() {
   const map = new Map()
 
   map.set(0x40, ' ')
@@ -210,11 +210,11 @@ function buildEBCDICMap() {
   return map
 }
 
-function decodeEBCDICBuffer(buffer) {
-  return [...buffer].map(decodeEBCDICByte).join("")
+function _decodeEBCDICBuffer(buffer) {
+  return [...buffer].map(_decodeEBCDICByte).join("")
 }
 
-function decodeEBCDICByte(byte) {
+function _decodeEBCDICByte(byte) {
   const c = EBCDIC_MAP.get(byte)
   if (c == undefined) {
     console.error("Unable to decode byte: " + byte.toString(16))
@@ -226,13 +226,13 @@ function decodeEBCDICByte(byte) {
 
 // Read Packed Decimals
 
-function readPackedDecimal(fd, length, wholeDigits) {
-  let ds = decodePackedDecimalDigits(_read(fd, length))
-  return decimalFromPackedDigits(ds, wholeDigits)
+function _readPackedDecimal(fd, length, wholeDigits) {
+  let ds = _decodePackedDecimalDigits(_read(fd, length))
+  return _decimalFromPackedDigits(ds, wholeDigits)
 }
 
 // http://www.3480-3590-data-conversion.com/article-packed-fields.html
-function decimalFromPackedDigits(digits, wholeDigits) {
+function _decimalFromPackedDigits(digits, wholeDigits) {
   let numDigitsLength = digits.length - 1  // last digit is actually the 'sign'
 
   if (wholeDigits > (digits.length - 1)) {
@@ -250,15 +250,15 @@ function decimalFromPackedDigits(digits, wholeDigits) {
   return parseFloat(numStr)
 }
 
-function decodePackedDecimalDigits(packedNums) {
+function _decodePackedDecimalDigits(packedNums) {
   let res = []
   for (let i = 0; i < packedNums.length; i++) {
-    res.push(...decodePackedDecimalDigitPair(packedNums[i]))
+    res.push(..._decodePackedDecimalDigitPair(packedNums[i]))
   }
   return res
 }
 
-function decodePackedDecimalDigitPair(packedNum) {
+function _decodePackedDecimalDigitPair(packedNum) {
   const first = packedNum >> 4
   const second = packedNum & 0x0F
   // console.log("Packed:", first, second)
