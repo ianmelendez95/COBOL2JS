@@ -42,58 +42,47 @@ function FileDescriptor(fileName) {
 }
 
 function _newObjFromVarSpec(varSpec) {
-  let obj = {}
-  for (spec of varSpec) {
-    obj[spec.name] = _newObjFromVarSpecItem(spec)
-  }
-  return obj
-}
-
-function _newObjFromVarSpecItem(specItem) {
-  if (specItem.type === 'string') {
+  if (varSpec.type === 'string') {
     return ''
-  } else if (specItem.type === 'binary-decimal') {
+  } else if (varSpec.type === 'binary-decimal') {
     return 0
-  } else if (specItem.type === 'compound') {
-    return _newObjFromVarSpec(specItem.children)
+  } else if (varSpec.type === 'compound') {
+    let obj = {}
+    for (spec of varSpec.children) {
+      obj[spec.name] = _newObjFromVarSpec(spec)
+    }
+    return { [varSpec.name]: obj }
   } else {
-    throw new Error("Unrecognized var spec: " + specItem.type)
+    throw new Error("Unrecognized var spec: " + varSpec.type)
   }
 }
 
 function _readVarSpec(fd, varSpec) {
-  let obj = {}
-  for (spec of varSpec) {
-    obj[spec.name] = _readVarSpecItem(fd, spec)
-  }
-  return obj
-}
-
-function _readVarSpecItem(fd, specItem) {
-  if (specItem.type === 'string') {
-    return _readText(fd, specItem.length)
-  } else if (specItem.type === 'binary-decimal') {
-    return _readPackedDecimal(fd, specItem.length, specItem.wholeDigits)
-  } else if (specItem.type === 'compound') {
-    return _readVarSpec(fd, specItem.children)
+  if (varSpec.type === 'string') {
+    return _readText(fd, varSpec.length)
+  } else if (varSpec.type === 'binary-decimal') {
+    return _readPackedDecimal(fd, varSpec.length, varSpec.wholeDigits)
+  } else if (varSpec.type === 'compound') {
+    let obj = {}
+    for (spec of varSpec.children) {
+      obj[spec.name] = _readVarSpec(fd, spec)
+    }
+    return { [varSpec.name]: obj }
   } else {
-    throw new Error("Unrecognized var spec: " + specItem.type)
+    throw new Error("Unrecognized var spec: " + varSpec.type)
   }
 }
 
 function _writeVarSpec(fd, varSpec, data) {
-  for (spec of varSpec) {
-    _writeVarSpecItem(fd, spec, data[spec.name])
-  }
-}
-
-function _writeVarSpecItem(fd, specItem, data) {
-  if (specItem.type === 'string') {
-    return _writeText(fd, specItem.length, data.toString())
-  } else if (specItem.type === 'compound') {
-    return _writeVarSpec(fd, specItem.children, data)
+  if (varSpec.type === 'string') {
+    _writeText(fd, varSpec.length, data.toString())
+  } else if (varSpec.type === 'compound') {
+    let obj = data[varSpec.name]
+    for (spec of varSpec.children) {
+      _writeVarSpec(fd, spec, obj[spec.name])
+    }
   } else {
-    throw new Error("Unrecognized var spec: " + specItem.type)
+    throw new Error("Unrecognized var spec: " + varSpec.type)
   }
 }
 
@@ -302,45 +291,41 @@ let acctRec = new FileDescriptor(process.env["ACCTREC"])
 
 // DATA DIVISION
 
-printLine.loadVarSpec([
-  {
-    name: "printRec",
-    type: "compound",
-    children: [
-      { name: "acctNoO" , length: 8, type: "string" },
-      { name: "acctLimitO" , length: 13, type: "string" },
-      { name: "acctBalanceO" , length: 13, type: "string" },
-      { name: "lastNameO" , length: 20, type: "string" },
-      { name: "firstNameO" , length: 15, type: "string" },
-      { name: "commentsO" , length: 50, type: "string" }
-    ]
-  }
-])
+printLine.loadVarSpec({
+  name: "printRec",
+  type: "compound",
+  children: [
+    { name: "acctNoO" , length: 8, type: "string" },
+    { name: "acctLimitO" , length: 13, type: "string" },
+    { name: "acctBalanceO" , length: 13, type: "string" },
+    { name: "lastNameO" , length: 20, type: "string" },
+    { name: "firstNameO" , length: 15, type: "string" },
+    { name: "commentsO" , length: 50, type: "string" }
+  ]
+})
 
-acctRec.loadVarSpec([
-  { 
-    name: "acctFields",
-    type: "compound",
-    children: [
-      {  name: "acctNo", type: "string", length: 8 },
-      {  name: "acctLimit", type: "binary-decimal", length: 5, wholeDigits: 7 },
-      {  name: "acctBalance", type: "binary-decimal", length: 5, wholeDigits: 7 },
-      {  name: "lastName", type: "string", length: 20 },
-      {  name: "firstName", type: "string", length: 15 },
-      {
-        name: "clientAddr",
-        type: "compound",
-        children: [
-          {  name: "streetAddr", length: 25, type: "string" },
-          {  name: "cityCounty", length: 20, type: "string" },
-          {  name: "usaState", length: 15, type: "string" }
-        ]
-      }, 
-      { name: "reserved", length: 7, type: "string" }, 
-      { name: "comments", length: 50, type: "string" }
-    ]
-  }
-])
+acctRec.loadVarSpec({ 
+  name: "acctFields",
+  type: "compound",
+  children: [
+    {  name: "acctNo", type: "string", length: 8 },
+    {  name: "acctLimit", type: "binary-decimal", length: 5, wholeDigits: 7 },
+    {  name: "acctBalance", type: "binary-decimal", length: 5, wholeDigits: 7 },
+    {  name: "lastName", type: "string", length: 20 },
+    {  name: "firstName", type: "string", length: 15 },
+    {
+      name: "clientAddr",
+      type: "compound",
+      children: [
+        {  name: "streetAddr", length: 25, type: "string" },
+        {  name: "cityCounty", length: 20, type: "string" },
+        {  name: "usaState", length: 15, type: "string" }
+      ]
+    }, 
+    { name: "reserved", length: 7, type: "string" }, 
+    { name: "comments", length: 50, type: "string" }
+  ]
+})
 
 let flags = { lastRec: ' ' }
 
