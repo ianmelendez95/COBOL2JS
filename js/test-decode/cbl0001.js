@@ -32,6 +32,7 @@ function FileDescriptor(fileName) {
 
   this.write = function () {
     _writeVarSpec(this.fd, this.varSpec, this.data)
+    fs.writeSync(this.fd, '\n')
   }
 
   this.loadVarSpec = function (varSpec) {
@@ -296,8 +297,8 @@ function _runProcedures(procedures) {
 
 // ENVIRONMENT DIVISION
 
-let printLine = new FileDescriptor("js/test-decode/PRTLINE")
-let acctRec = new FileDescriptor("js/test-decode/ACCTREC")
+let printLine = new FileDescriptor(process.env["PRTLINE"])
+let acctRec = new FileDescriptor(process.env["ACCTREC"])
 
 // DATA DIVISION
 
@@ -348,7 +349,7 @@ let flags = { lastRec: ' ' }
 function openFiles() {
   console.log("TRACE openFiles")
   acctRec.open('r')
-  printLine.open('a')
+  printLine.open('w')
 }
 
 function readNextRecord() {
