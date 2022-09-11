@@ -78,7 +78,7 @@ record2jsVarDec record =
 fileDesc2js :: COBOL.FileDesc -> JS.Statement
 fileDesc2js (COBOL.FileDesc name record) = 
   JS.Expr $ JS.Call 
-    (JS.VarVal $ var2js name <> ".loadVarSpec")
+    (JS.VarVal $ var2js name <> "._loadVarSpec")
     [JS.ObjVal (varSpec2js . record2VarSpec $ record)]
 
 varSpec2js :: VarSpec -> JS.Obj
@@ -161,20 +161,20 @@ statement2js (COBOL.Display vs) = JS.Expr $ JS.Log (map c2jVal vs)
 statement2js (COBOL.Move val var) = JS.Expr $ JS.Set (var2js var) (value2js val)
 statement2js (COBOL.Compute var val) = JS.Expr $ JS.Set (var2js var) (arithmetic2js val)
 statement2js (COBOL.Open put var) = 
-  JS.Expr $ JS.Call (JS.VarVal $ var2js var <> ".open") 
+  JS.Expr $ JS.Call (JS.VarVal $ var2js var <> "._open") 
                     [JS.StrVal (putFlags put)]
   where 
     putFlags :: COBOL.Put -> T.Text
     putFlags COBOL.Input  = "r"
     putFlags COBOL.Output = "w"
-statement2js (COBOL.Close var) = JS.Expr $ JS.Call (JS.VarVal $ var2js var <> ".close") []
+statement2js (COBOL.Close var) = JS.Expr $ JS.Call (JS.VarVal $ var2js var <> "._close") []
 statement2js (COBOL.Read var mstatements) = 
-  JS.Expr $ JS.Call (JS.VarVal $ var2js var <> ".read") 
+  JS.Expr $ JS.Call (JS.VarVal $ var2js var <> "._read") 
                     (maybe [] (singleton . statements2func) mstatements)
   where 
     statements2func :: [COBOL.Statement] -> JS.Value
     statements2func = JS.FunVal "" . map statement2js
-statement2js (COBOL.Write var) = JS.Expr $ JS.Call (JS.VarVal $ var2js var <> ".write") []
+statement2js (COBOL.Write var) = JS.Expr $ JS.Call (JS.VarVal $ var2js var <> "._write") []
 statement2js (COBOL.Perform var) = JS.Expr $ JS.Call (JS.VarVal $ var2js var) []
 statement2js (COBOL.PerformUntil cond sts) = 
   JS.While (JS.Unary JS.UNot (condition2js cond)) (map statement2js sts)

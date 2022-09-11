@@ -8,21 +8,21 @@ const _READ_EOF = "READ-EOF"
 // File Descriptors
 
 function FileDescriptor(fileName) {
-  this.fileName = fileName
-  this.fd = undefined
-  this.varSpec = undefined
+  this._fileName = fileName
+  this._fd = undefined
+  this._varSpec = undefined
 
-  this.open = function (flags) {
-    this.fd = fs.openSync(this.fileName, flags)
+  this._open = function (flags) {
+    this._fd = fs.openSync(this._fileName, flags)
   }
 
-  this.close = function () {
-    fs.closeSync(this.fd)
+  this._close = function () {
+    fs.closeSync(this._fd)
   }
 
-  this.read = function (atEnd) {
+  this._read = function (atEnd) {
     try {
-      this.data[this.varSpec.name] = _readVarSpec(this.fd, this.varSpec)
+      this[this._varSpec.name] = _readVarSpec(this._fd, this._varSpec)
     } catch (e) {
       if (e.message === _READ_EOF) {
         atEnd()
@@ -30,14 +30,14 @@ function FileDescriptor(fileName) {
     }
   }
 
-  this.write = function () {
-    _writeVarSpec(this.fd, this.varSpec, this.data)
-    fs.writeSync(this.fd, '\n')
+  this._write = function () {
+    _writeVarSpec(this._fd, this._varSpec, this)
+    fs.writeSync(this._fd, '\n')
   }
 
-  this.loadVarSpec = function (varSpec) {
-    this.varSpec = varSpec
-    this.data = { [varSpec.name]: _valueFromVarSpec(varSpec) }
+  this._loadVarSpec = function (varSpec) {
+    this._varSpec = varSpec
+    this[varSpec.name] = _valueFromVarSpec(varSpec)
   }
 }
 
