@@ -7,7 +7,7 @@
     {
       "type": "pwa-node",
       "request": "launch",
-      "name": "Launch Program",
+      "name": "Launch Compiled Program",
       "skipFiles": [
         "<node_internals>/**"
       ],
@@ -16,6 +16,19 @@
         "ACCTREC": "js/data",
         "PRTLINE": "js/prtline"
       }
-    }
+    },
+    {
+      "type": "pwa-node",
+      "request": "launch",
+      "name": "Launch Written Program",
+      "skipFiles": [
+        "<node_internals>/**"
+      ],
+      "program": "${workspaceFolder}/js/test-decode/cbl0001.js",
+      "env": {
+        "ACCTREC": "js/test-decode/data",
+        "PRTLINE": "js/test-decode/prtline"
+      }
+    },
   ]
 }
