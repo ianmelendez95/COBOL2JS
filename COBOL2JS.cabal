@@ -32,6 +32,7 @@ library
       Generic.GReadEnum
       Generic.GShowEnum
       JS
+      JS.Runtime
       Lib
   other-modules:
       Paths_COBOL2JS
@@ -40,7 +41,9 @@ library
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
   build-depends:
       base >=4.7 && <5
+    , bytestring
     , containers
+    , file-embed
     , generic-deriving
     , lens
     , megaparsec

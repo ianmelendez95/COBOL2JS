@@ -42,6 +42,8 @@ library:
   - generic-deriving
   - split
   - lens
+  - bytestring
+  - file-embed
 
 executables:
   COBOL2JS-exe:

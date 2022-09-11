@@ -11,10 +11,10 @@
       "skipFiles": [
         "<node_internals>/**"
       ],
-      "program": "${workspaceFolder}/js/test-decode/cbl0001.js",
+      "program": "${workspaceFolder}/js/cbl0001.js",
       "env": {
-        "ACCTREC": "js/test-decode/data",
-        "PRTLINE": "js/test-decode/prtline"
+        "ACCTREC": "js/data",
+        "PRTLINE": "js/prtline"
       }
     }
   ]

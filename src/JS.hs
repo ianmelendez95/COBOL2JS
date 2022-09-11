@@ -23,6 +23,8 @@ import qualified Data.Map as Map
 import Data.List (intersperse)
 import Data.Text.Util
 
+import JS.Runtime
+
 newtype Script = Script [Statement] deriving Show
 
 data Statement = Expr Expr
@@ -70,10 +72,11 @@ instance Show UOp where
 instance Show IOp where 
   show Mult = "*"
   show Add  = "+"
-  show IEq  = "="
+  show IEq  = "=="
 
 scriptToText :: Script -> T.Text
-scriptToText (Script statements) = unlinesT . map statementToText $ statements
+scriptToText (Script statements) =
+   runtimeText <> "\n" <> (unlinesT . map statementToText $ statements)
 
 statementToText :: Statement -> T.Text
 statementToText (Expr e) = exprToText e
