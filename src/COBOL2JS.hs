@@ -16,6 +16,8 @@ import Data.List.Split
 import Data.Maybe
 import Data.Char
 
+import Control.Lens
+
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
 import Data.Text.Util
@@ -32,10 +34,20 @@ c2jFile cobolSrc jsDest = do
   TIO.writeFile jsDest (JS.scriptToText jsScript)
 
 c2j :: COBOL.Prog -> JS.Script
-c2j (COBOL.Prog _ env data_div paras) = 
-  JS.Script $  map fileCtrl2js env
-            <> map fileDesc2js (COBOL.dataFiles data_div)
-            <> concatMap paragraph2js paras
+c2j (COBOL.Prog _ env data_div proc_div) = do 
+  let file_ctrl = map fileCtrl2js env
+      file_desc = map fileDesc2js (COBOL.dataFiles data_div)
+      (proc_names, procs) = procedureDiv2js proc_div
+   in JS.Script $ file_ctrl <> file_desc <> procs <> procsRunner proc_names
+
+procsRunner :: [T.Text] -> [JS.Statement]
+procsRunner proc_names = 
+  [ JS.Expr $ JS.VarDec JS.Const "__PROCEDURES__" (Just (JS.Val . JS.ArrVal $ procs_arr))
+  , JS.Expr $ JS.Call (JS.VarVal "_runProcedures") [JS.VarVal "__PROCEDURES__"]
+  ]
+  where 
+    procs_arr :: JS.Arr
+    procs_arr = map JS.VarVal proc_names
 
 fileCtrl2js :: COBOL.FileCtrl -> JS.Statement
 fileCtrl2js (COBOL.FCSelect fd env_var) = 
@@ -113,12 +125,19 @@ fmt2VarSpecFmt (COBOL.RFmt chars COBOL.RComp3 _) =
 count :: (a -> Bool) -> [a] -> Int
 count f = length . filter f 
 
-paragraph2js :: COBOL.Para -> [JS.Statement]
-paragraph2js (COBOL.Para mname sts) = 
+-- Return (function names, statements)
+procedureDiv2js :: COBOL.ProcDiv -> ([T.Text], [JS.Statement])
+procedureDiv2js paras = 
+  foldMap (bothSingle . paragraph2js) (zip [0..] paras)
+  where 
+    bothSingle :: (a, b) -> ([a], [b])
+    bothSingle (x,y) = (singleton x, singleton y)
+
+paragraph2js :: (Int, COBOL.Para) -> (T.Text, JS.Statement)
+paragraph2js (n, COBOL.Para mname sts) = 
   let js_sts = concatMap sentence2js sts
-   in case mname of 
-        Nothing -> js_sts
-        Just name -> [JS.Expr $ JS.Func (var2js name) js_sts]
+      name = maybe ("main_" <> showT n) var2js mname
+   in (name, JS.Expr $ JS.Func name js_sts) 
 
 sentence2js :: COBOL.Sentence -> [JS.Statement]
 sentence2js = map statement2js

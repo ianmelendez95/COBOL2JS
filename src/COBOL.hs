@@ -6,6 +6,8 @@ module COBOL
   , FileCtrl (..)
 
   , DataDiv (..)
+  , ProcDiv
+
   , FileDesc (..)
   , Record (..)
 

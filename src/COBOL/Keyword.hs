@@ -64,7 +64,7 @@ instance GEnum Keyword
 instance GReadEnum Keyword
 
 instance Show Keyword where 
-  show = showKeyword . gshowEnum. from
+  show = showKeyword . gshowEnum . from
 
 instance Read Keyword where 
   readPrec :: ReadPrec Keyword

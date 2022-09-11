@@ -4,6 +4,9 @@ module JS
   ( Script (..)
   , Statement (..)
   , Expr (..)
+
+  , VarBind (..)
+
   , UOp (..)
   , IOp (..)
 
@@ -17,7 +20,7 @@ import Prelude hiding (unlines)
 import qualified Data.Text as T hiding (unlines)
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.List (intersperse, intercalate)
+import Data.List (intersperse)
 import Data.Text.Util
 
 newtype Script = Script [Statement] deriving Show
@@ -31,11 +34,14 @@ data Expr = Raw T.Text
           | Func T.Text [Statement]
           | Call Value [Value]
           | Log [Value]
+          | VarDec VarBind T.Text (Maybe Expr)
           | Set T.Text Expr
           | Val Value
           | Infix Expr IOp Expr
           | Unary UOp Expr
           deriving Show
+
+data VarBind = Let | Const 
 
 data UOp = UNot
 
@@ -53,6 +59,10 @@ data Value = StrVal T.Text
 
 type Obj = Map T.Text Value
 type Arr = [Value]
+
+instance Show VarBind where 
+  show Let = "let"
+  show Const = "const"
 
 instance Show UOp where 
   show UNot = "!"
@@ -83,10 +93,12 @@ exprToText (Func name body) =
 exprToText (Call val args) = valToText val <> "(" <> argsToText args <> ")"
   where 
     argsToText :: [Value] -> T.Text
-    argsToText = mconcat . intersperse ", " . map (valToText)
+    argsToText = mconcat . intersperse ", " . map valToText
 exprToText (Log vals) = "console.log(" <> args <> ")" 
   where 
     args = T.concat . intersperse ", " . map valToText $ vals
+exprToText (VarDec bind name mval) = 
+  T.unwords $ [ showT bind, name ] ++ maybe [] (\e -> ["=", exprToText e]) mval
 exprToText (Set var val) = var <> " = " <> exprToText val
 exprToText (Val val) = valToText val
 exprToText (Infix l op r) = "(" <> exprToText l <> showT op <> exprToText r <> ")"

@@ -41,6 +41,7 @@ library:
   - containers
   - generic-deriving
   - split
+  - lens
 
 executables:
   COBOL2JS-exe:
