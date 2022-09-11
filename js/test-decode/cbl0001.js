@@ -1,5 +1,5 @@
-// import * as fs from 'node:fs'
-// import { Buffer } from 'node:buffer'
+// BEGIN RUNTIME
+
 const fs = require('node:fs')
 const { Buffer } = require('node:buffer')
 
@@ -281,6 +281,8 @@ function _runProcedures(procedures) {
     }
   }
 }
+
+// END RUNTIME
 
 // BEGIN PROGRAM
 

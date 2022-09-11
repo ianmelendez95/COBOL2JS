@@ -22,7 +22,7 @@ function FileDescriptor(fileName) {
 
   this.read = function (atEnd) {
     try {
-      this.data = _readVarSpec(this.fd, this.varSpec)
+      this.data[this.varSpec.name] = _readVarSpec(this.fd, this.varSpec)
     } catch (e) {
       if (e.message === _READ_EOF) {
         atEnd()
@@ -37,21 +37,21 @@ function FileDescriptor(fileName) {
 
   this.loadVarSpec = function (varSpec) {
     this.varSpec = varSpec
-    this.data = _newObjFromVarSpec(varSpec)
+    this.data = { [varSpec.name]: _valueFromVarSpec(varSpec) }
   }
 }
 
-function _newObjFromVarSpec(varSpec) {
+function _valueFromVarSpec(varSpec) {
   if (varSpec.type === 'string') {
-    return ''
+    return varSpec.initialValue ? varSpec.initialValue : ''
   } else if (varSpec.type === 'binary-decimal') {
-    return 0
+    return varSpec.initialValue ? varSpec.initialValue : 0
   } else if (varSpec.type === 'compound') {
     let obj = {}
     for (spec of varSpec.children) {
-      obj[spec.name] = _newObjFromVarSpec(spec)
+      obj[spec.name] = _valueFromVarSpec(spec)
     }
-    return { [varSpec.name]: obj }
+    return obj
   } else {
     throw new Error("Unrecognized var spec: " + varSpec.type)
   }
@@ -67,7 +67,7 @@ function _readVarSpec(fd, varSpec) {
     for (spec of varSpec.children) {
       obj[spec.name] = _readVarSpec(fd, spec)
     }
-    return { [varSpec.name]: obj }
+    return obj
   } else {
     throw new Error("Unrecognized var spec: " + varSpec.type)
   }
