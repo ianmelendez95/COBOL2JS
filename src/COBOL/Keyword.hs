@@ -16,6 +16,7 @@ import Data.List (intercalate)
 import Data.List.Split
 import Text.Read
 import Generic.GReadEnum
+import Data.Text.Util
 
 data Keyword = KDivision 
              | KIdentification
@@ -75,11 +76,7 @@ instance Read Keyword where
 
 keywordToConStr :: String -> String
 keywordToConStr str = 
-  "K" <> concatMap (mapTail toLower) (splitOn "-" str)
-
-mapTail :: (a -> a) -> [a] -> [a]
-mapTail _ [] = []
-mapTail f (x:xs) = x : map f xs
+  "K" <> kebab2camel' str
 
 showKeyword :: String -> String
 showKeyword = coerceCase . drop 1

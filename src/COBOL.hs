@@ -2,15 +2,29 @@
 
 module COBOL 
   ( Prog (..)
+
+  , FileCtrl (..)
+
+  , DataDiv (..)
+  , FileDesc (..)
+  , Record (..)
+
+  , RFmt (..)
+  , RUsage (..)
+  , RFmtChar (..)
+
   , Para (..)
   , Sentence
   , Statement (..)
   , Value (..)
 
+  , Put (..)
+
   , Arith (..)
-  , ABin (..)
   , AVal (..)
-  , AOp (..)
+  , IOp (..)
+
+  , Cond (..)
 
   , COBOL.readFile
   , arithValToValue
@@ -24,6 +38,7 @@ import Text.Read (readMaybe)
 import Data.List ( group )
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
+import Data.Text.Util
 
 import Text.Megaparsec
 import Text.Megaparsec.Char ( char, hspace, newline )
@@ -33,8 +48,8 @@ import COBOL.Keyword
 
 -- import Debug.Trace
 
-trace :: String -> a -> a
-trace _ = id
+-- trace :: String -> a -> a
+-- trace _ = id
 
 traceM :: Applicative m => String -> m ()
 traceM _ = pure ()
@@ -121,29 +136,19 @@ data Put = Input | Output
          deriving Show
               
 data Arith = AVal Value
-           | ABin1 ABin
-           | ABin2 ABin AOp ABin 
+           | ABin Arith IOp Arith 
            deriving Show
 
-data ABin = ABin AVal AOp AVal 
-          deriving Show
-
-data AOp = Mult 
+data IOp = Mult 
          | Add
+         | IEq
          deriving Show
 
 data AVal = AVar T.Text
           | ANum Int
           deriving Show
 
-data Cond = Cond CVal COp CVal
-          deriving Show
-
-data COp = CEq
-         deriving Show
-
-data CVal = CVar T.Text 
-          | CStr T.Text
+data Cond = Cond Value IOp Value
           deriving Show
 
 data Value = VarVal T.Text
@@ -360,26 +365,13 @@ arithmeticExpression = choice
     arithBinMaybe2 :: Parser Arith
     arithBinMaybe2 = do 
       a1 <- arithBin
-      (ABin2 a1 <$> arithOp <*> arithBin) <|> pure (ABin1 a1)
+      (ABin a1 <$> infixOp <*> arithBin) <|> pure a1
     
-    arithBin :: Parser ABin
+    arithBin :: Parser Arith
     arithBin = 
-      ABin <$> arithVal 
-           <*> arithOp
-           <*> arithVal
-
-    arithVal :: Parser AVal
-    arithVal = choice 
-      [ ANum 0 <$  keyword KZero 
-      , ANum   <$> decimal
-      , AVar   <$> identifier
-      ]
-    
-    arithOp :: Parser AOp
-    arithOp = choice 
-      [ Mult <$ symbol "*"
-      , Add  <$ symbol "+"
-      ]
+      ABin <$> (AVal <$> value) 
+           <*> infixOp
+           <*> (AVal <$> value)
 
 openStatement :: Parser Statement
 openStatement = 
@@ -416,16 +408,7 @@ performStatement = do
     simple = Perform <$> (traceM "simple-ident" >> identifier)
 
 condition :: Parser Cond
-condition = Cond <$> condValue <*> condOp <*> condValue
-
-condOp :: Parser COp
-condOp = CEq <$ symbol "="
-
-condValue :: Parser CVal
-condValue = choice 
-  [ CStr <$> strLit
-  , CVar <$> identifier
-  ]
+condition = Cond <$> value <*> infixOp <*> value
 
 value :: Parser Value
 value = choice 
@@ -434,6 +417,13 @@ value = choice
   , VarVal     <$> identifier
   , NumVal 0   <$  keyword KZero
   , StrVal " " <$  keyword KSpace
+  ]
+
+infixOp :: Parser IOp
+infixOp = choice
+  [ Mult <$ symbol "*"
+  , Add  <$ symbol "+"
+  , IEq  <$ symbol "="
   ]
 
 keywords :: [Keyword] -> Parser [Keyword]
@@ -503,11 +493,5 @@ isKeyword = isJust . readKeyword . T.unpack
     readKeyword :: String -> Maybe Keyword
     readKeyword = readMaybe
 
-showT :: Show a => a -> T.Text
-showT = T.pack . show
-
-failT :: MonadFail m => T.Text -> m a
-failT = fail . T.unpack
-
-traceP :: Monad m => String -> m a -> m a
-traceP msg p = p >>= (trace msg . pure)
+-- traceP :: Monad m => String -> m a -> m a
+-- traceP msg p = p >>= (trace msg . pure)

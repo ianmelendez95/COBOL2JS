@@ -28,6 +28,7 @@ library
       COBOL
       COBOL.Keyword
       COBOL2JS
+      Data.Text.Util
       Generic.GReadEnum
       Generic.GShowEnum
       JS

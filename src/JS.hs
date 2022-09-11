@@ -3,57 +3,113 @@
 module JS 
   ( Script (..)
   , Statement (..)
-  , Arith (..)
+  , Expr (..)
+  , UOp (..)
+  , IOp (..)
+
   , Value (..)
-  , AOp (..)
+  , Obj
+  , Arr
   , scriptToText
   ) where 
 
-import qualified Data.Text as T
-import Data.List (intersperse)
+import Prelude hiding (unlines)
+import qualified Data.Text as T hiding (unlines)
+import Data.Map (Map)
+import qualified Data.Map as Map
+import Data.List (intersperse, intercalate)
+import Data.Text.Util
 
 newtype Script = Script [Statement] deriving Show
 
-data Statement = Log [Value]
-               | Set T.Text Arith
-               | NoOp
+data Statement = Expr Expr
+               | While Expr [Statement]
+               | Return Expr
                deriving Show
 
-data Arith = AVal Value
-           | Arith Arith AOp Arith
-           deriving Show
+data Expr = Raw T.Text
+          | Func T.Text [Statement]
+          | Call Value [Value]
+          | Log [Value]
+          | Set T.Text Expr
+          | Val Value
+          | Infix Expr IOp Expr
+          | Unary UOp Expr
+          deriving Show
 
-data AOp = Mult 
+data UOp = UNot
+
+data IOp = Mult 
          | Add
+         | IEq
 
 data Value = StrVal T.Text
            | VarVal T.Text 
            | NumVal Int
+           | ObjVal Obj
+           | ArrVal Arr
+           | FunVal T.Text [Statement]
            deriving Show
 
-instance Show AOp where 
+type Obj = Map T.Text Value
+type Arr = [Value]
+
+instance Show UOp where 
+  show UNot = "!"
+
+instance Show IOp where 
   show Mult = "*"
   show Add  = "+"
-
-showT :: Show a => a -> T.Text
-showT = T.pack . show
+  show IEq  = "="
 
 scriptToText :: Script -> T.Text
-scriptToText (Script statements) = T.unlines . map statementToText $ statements
+scriptToText (Script statements) = unlinesT . map statementToText $ statements
 
 statementToText :: Statement -> T.Text
-statementToText (Log vals) = "console.log(" <> args <> ")" 
+statementToText (Expr e) = exprToText e
+statementToText (While cond body) = unlinesT $
+  [ "while (" <> exprToText cond <> ") {" ] <> map statementToText body <> [ "}" ]
+statementToText (Return e) = "return " <> exprToText e
+
+exprToText :: Expr -> T.Text
+exprToText (Raw t) = t
+exprToText (Func name body) = 
+  let body_text :: [T.Text]
+      body_text = map statementToText body
+  in unlinesT $ 
+    [ "function " <> name <> "() {" ] 
+    ++ body_text ++ 
+    [ "}" ]
+exprToText (Call val args) = valToText val <> "(" <> argsToText args <> ")"
   where 
-    args = T.concat . intersperse ", " . map valToScript $ vals
-statementToText (Set var val) = var <> " = " <> arithToScript val
-statementToText NoOp = ""
+    argsToText :: [Value] -> T.Text
+    argsToText = mconcat . intersperse ", " . map (valToText)
+exprToText (Log vals) = "console.log(" <> args <> ")" 
+  where 
+    args = T.concat . intersperse ", " . map valToText $ vals
+exprToText (Set var val) = var <> " = " <> exprToText val
+exprToText (Val val) = valToText val
+exprToText (Infix l op r) = "(" <> exprToText l <> showT op <> exprToText r <> ")"
+exprToText (Unary op e) = showT op <> "(" <> exprToText e <> ")"
 
-arithToScript :: Arith -> T.Text
-arithToScript (AVal v) = valToScript v
-arithToScript (Arith a1 op a2) = 
-  "(" <> arithToScript a1 <> " " <> showT op <> " " <> arithToScript a2 <> ")"
+-- arithToScript :: Arith -> T.Text
+-- arithToScript (AVal v) = valToScript v
+-- arithToScript (ABin a1 op a2) = 
+--   "(" <> arithToScript a1 <> " " <> showT op <> " " <> arithToScript a2 <> ")"
 
-valToScript :: Value -> T.Text
-valToScript (StrVal str) = "\"" <> str <> "\""
-valToScript (VarVal var) = var
-valToScript (NumVal num) = T.pack . show $ num
+valToText :: Value -> T.Text
+valToText (StrVal str) = "\"" <> str <> "\""
+valToText (VarVal var) = var
+valToText (NumVal num) = T.pack . show $ num
+valToText (ObjVal entries) = unlinesT $ 
+  [ "{" ] <> map showEntry (Map.toList entries) <> [ "}" ]
+  where 
+    showEntry :: (T.Text, Value) -> T.Text
+    showEntry (k, v) = k <> ": " <> valToText v <> ","
+valToText (ArrVal arr) = unlinesT $ 
+  [ "[" ] <> map (\v -> valToText v <> ", ") arr <> [ "]" ]
+valToText (FunVal name body) = unlinesT $ 
+  [ "function " <> name <> "() {" ] <> map statementToText body <> [ "}" ]
+
+unlinesT :: [T.Text] -> T.Text
+unlinesT = mconcat . intersperse "\n"
