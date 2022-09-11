@@ -96,10 +96,10 @@ data FileDesc = FileDesc T.Text Record
               deriving Show
 
 data Record = RGroup Int T.Text [Record]
-            | RElem  Int T.Text RFmt
+            | RElem  Int T.Text RFmt (Maybe Value)
             deriving Show
 
-data RFmt = RFmt [RFmtChar] RUsage (Maybe Value)
+data RFmt = RFmt [RFmtChar] RUsage
 
 data RUsage = RDisplay 
             | RComp3
@@ -160,11 +160,11 @@ data Value = VarVal T.Text
 -- Show Instances
 
 instance Show RFmt where 
-  show (RFmt chars usage fmt_val) = unwords 
+  show (RFmt chars usage) = unwords 
     [ show KPic
     , showFmtChars chars 
     , showUsage usage
-    , maybe "" (\v -> unwords [show KValue, show v]) fmt_val
+    -- , maybe "" (\v -> unwords [show KValue, show v]) fmt_val
     ]
     where 
       showUsage :: RUsage -> String
@@ -273,7 +273,7 @@ record = do
   level <- (decimal :: Parser Int)
   name  <- identifier
   choice 
-    [ RElem  level name <$> (keyword KPic >> recordFormat <* period)
+    [ RElem  level name <$> (keyword KPic >> recordFormat) <*> optional recordInitValue <* period
     , RGroup level name <$> (period >> many (recordAbove level))
     ]
   where 
@@ -284,9 +284,12 @@ record = do
         then record
         else fail $ "Expecting record above: " ++ show level_limit
 
+    recordInitValue :: Parser Value
+    recordInitValue = keyword KValue >> value
+
 recordFormat :: Parser RFmt
 recordFormat =
-  RFmt <$> fmtChars <*> fmtUsage <*> fmtInitValue 
+  RFmt <$> fmtChars <*> fmtUsage
   where 
     fmtChars :: Parser [RFmtChar]
     fmtChars = lexeme (concat <$> many fmtCharItem)
@@ -301,9 +304,6 @@ recordFormat =
 
     fmtUsage :: Parser RUsage
     fmtUsage = option RDisplay (RComp3 <$ keyword KComp3)
-
-    fmtInitValue :: Parser (Maybe Value)
-    fmtInitValue = optional (keyword KValue >> value)
 
 recordFormatChar :: Parser RFmtChar
 recordFormatChar = choice 

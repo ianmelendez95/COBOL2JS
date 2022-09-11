@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TupleSections #-}
 
 module COBOL2JS 
   ( c2jFile
@@ -21,10 +22,14 @@ import qualified Data.Text.IO as TIO
 import Data.Text.Util
 
 data VarSpec = VSComp T.Text [VarSpec]
-             | VSData T.Text VarSpecFmt
+             | VSData T.Text VarSpecFmt (Maybe JS.Value)
 
 data VarSpecFmt = VSFString Int
                 | VSFBinDec Int Int
+
+varSpecName :: VarSpec -> T.Text
+varSpecName (VSComp name _) = name
+varSpecName (VSData name _ _) = name
 
 c2jFile :: FilePath -> FilePath -> IO ()
 c2jFile cobolSrc jsDest = do
@@ -34,9 +39,9 @@ c2jFile cobolSrc jsDest = do
 c2j :: COBOL.Prog -> JS.Script
 c2j (COBOL.Prog _ env data_div proc_div) = do 
   let file_ctrl = map fileCtrl2js env
-      file_desc = map fileDesc2js (COBOL.dataFiles data_div)
+      data_sts = dataDiv2js data_div
       (proc_names, procs) = procedureDiv2js proc_div
-   in JS.Script $ file_ctrl <> file_desc <> procs <> procsRunner proc_names
+   in JS.Script $ file_ctrl <> data_sts <> procs <> procsRunner proc_names
 
 procsRunner :: [T.Text] -> [JS.Statement]
 procsRunner proc_names = 
@@ -57,6 +62,19 @@ fileCtrl2js (COBOL.FCSelect fd env_var) =
     , "\"])"
     ]
 
+dataDiv2js :: COBOL.DataDiv -> [JS.Statement]
+dataDiv2js (COBOL.DataDiv files storage) = 
+  let file_desc = map fileDesc2js files
+      store_vars = map record2jsVarDec storage
+   in file_desc <> store_vars
+
+record2jsVarDec :: COBOL.Record -> JS.Statement
+record2jsVarDec record = 
+  let spec = record2VarSpec record
+   in JS.Expr $ JS.VarDec JS.Let (varSpecName spec) 
+        (Just (JS.Call (JS.VarVal "_valueFromVarSpec") 
+                       [JS.ObjVal $ varSpec2js spec]))
+
 fileDesc2js :: COBOL.FileDesc -> JS.Statement
 fileDesc2js (COBOL.FileDesc name record) = 
   JS.Expr $ JS.Call 
@@ -64,40 +82,38 @@ fileDesc2js (COBOL.FileDesc name record) =
     [JS.ObjVal (varSpec2js . record2VarSpec $ record)]
 
 varSpec2js :: VarSpec -> JS.Obj
-varSpec2js (VSComp name specs) = Map.fromList 
-  [ ("name", JS.StrVal name)
+varSpec2js (VSComp name specs) = Map.fromList
+  [ ("name", JS.StrVal name) 
   , ("type", JS.StrVal "compound")
   , ( "children"
-    , JS.ArrVal (map (JS.ObjVal . varSpec2js) specs))
+    , JS.ArrVal (map (JS.ObjVal . varSpec2js) specs)
+    )
   ]
-varSpec2js (VSData name fmt) = Map.fromList $
-  [ ("name", JS.StrVal name)
-  ] <> fmtProps fmt
-  where 
-    fmtProps :: VarSpecFmt -> [(T.Text, JS.Value)]
-    fmtProps (VSFString len) = 
-      [ ("type",   JS.StrVal "string")
-      , ("length", JS.NumVal len)
-      ]
-    fmtProps (VSFBinDec len whole_digits) = 
-      [ ("type",        JS.StrVal "binary-decimal")
-      , ("length",      JS.NumVal len)
-      , ("wholeDigits", JS.NumVal whole_digits)
-      ]
+varSpec2js (VSData name cont mval) = 
+  Map.fromList $ 
+    [ ("name", JS.StrVal name) ] ++ 
+    varSpecFmt2Props cont ++
+    maybe [] (singleton . ("initialValue",)) mval
 
+varSpecFmt2Props :: VarSpecFmt -> [(T.Text, JS.Value)]
+varSpecFmt2Props (VSFString len) = 
+  [ ("type",   JS.StrVal "string")
+  , ("length", JS.NumVal len)
+  ]
+varSpecFmt2Props (VSFBinDec len whole_digits) = 
+  [ ("type",        JS.StrVal "binary-decimal")
+  , ("length",      JS.NumVal len)
+  , ("wholeDigits", JS.NumVal whole_digits)
+  ]
 
 record2VarSpec :: COBOL.Record -> VarSpec
 record2VarSpec (COBOL.RGroup _ name recs) = 
   VSComp (var2js name) (map record2VarSpec recs)
-record2VarSpec (COBOL.RElem _ name fmt) = 
-  VSData (var2js name) (fmt2VarSpecFmt fmt)
+record2VarSpec (COBOL.RElem _ name fmt mvalue) = 
+  VSData (var2js name) (fmt2VarSpecCont fmt) (c2jVal <$> mvalue)
 
-fmt2VarSpecFmt :: COBOL.RFmt -> VarSpecFmt
-
-fmt2VarSpecFmt fmt@(COBOL.RFmt _ _ (Just _)) = 
-  error $ "Initial values in file section not implemented: " <> show fmt
-
-fmt2VarSpecFmt (COBOL.RFmt chars COBOL.RDisplay _) = 
+fmt2VarSpecCont :: COBOL.RFmt -> VarSpecFmt
+fmt2VarSpecCont (COBOL.RFmt chars COBOL.RDisplay) = 
   VSFString (count isDisplayChar chars)
   where 
     isDisplayChar :: COBOL.RFmtChar -> Bool
@@ -105,7 +121,7 @@ fmt2VarSpecFmt (COBOL.RFmt chars COBOL.RDisplay _) =
     isDisplayChar _ = False
 
 -- http://www.3480-3590-data-conversion.com/article-packed-fields.html
-fmt2VarSpecFmt (COBOL.RFmt chars COBOL.RComp3 _) = 
+fmt2VarSpecCont (COBOL.RFmt chars COBOL.RComp3) = 
   VSFBinDec (halfRoundUp $ count isDigitChar chars) 
             (count isDigitChar (takeWhile (not . isDecimalChar) chars))
   where 
