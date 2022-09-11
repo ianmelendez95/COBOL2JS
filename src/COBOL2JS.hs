@@ -16,8 +16,6 @@ import Data.List.Split
 import Data.Maybe
 import Data.Char
 
-import Control.Lens
-
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
 import Data.Text.Util
