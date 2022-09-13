@@ -5,33 +5,20 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "type": "pwa-node",
-      "request": "launch",
-      "name": "Launch Compiled Program",
-      "skipFiles": [
-        "<node_internals>/**"
-      ],
-      "program": "${workspaceFolder}/js/cbl0001.js",
-      "env": {
-        "ACCTREC": "js/data",
-        "PRTLINE": "js/prtline"
-      }
-    },
-    {
-      "type": "pwa-node",
+      "type": "node",
       "request": "launch",
       "name": "Launch Written Program",
       "skipFiles": [
         "<node_internals>/**"
       ],
-      "program": "${workspaceFolder}/js/test-decode/cbl0001.js",
+      "program": "${workspaceFolder}/handwritten-testing/cbl0001.js",
       "env": {
-        "ACCTREC": "js/test-decode/data",
-        "PRTLINE": "js/test-decode/prtline"
+        "ACCTREC": "handwritten-testing/data",
+        "PRTLINE": "handwritten-testing/prtline"
       }
     },
     {
-      "type": "pwa-node",
+      "type": "node",
       "request": "launch",
       "name": "Launch Hello World",
       "skipFiles": [
@@ -40,7 +27,7 @@
       "program": "${workspaceFolder}/examples/hello-world/hello.js",
     },
     {
-      "type": "pwa-node",
+      "type": "node",
       "request": "launch",
       "name": "Launch Simple Var Print",
       "skipFiles": [
@@ -49,7 +36,7 @@
       "program": "${workspaceFolder}/examples/simple-var-print/payroll.js",
     },
     {
-      "type": "pwa-node",
+      "type": "node",
       "request": "launch",
       "name": "Launch Simple Read Write",
       "skipFiles": [
