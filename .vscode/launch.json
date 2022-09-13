@@ -42,6 +42,15 @@
     {
       "type": "pwa-node",
       "request": "launch",
+      "name": "Launch Simple Var Print",
+      "skipFiles": [
+        "<node_internals>/**"
+      ],
+      "program": "${workspaceFolder}/examples/simple-var-print/payroll.js",
+    },
+    {
+      "type": "pwa-node",
+      "request": "launch",
       "name": "Launch Simple Read Write",
       "skipFiles": [
         "<node_internals>/**"
