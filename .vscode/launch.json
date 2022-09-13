@@ -33,6 +33,15 @@
     {
       "type": "pwa-node",
       "request": "launch",
+      "name": "Launch Hello World",
+      "skipFiles": [
+        "<node_internals>/**"
+      ],
+      "program": "${workspaceFolder}/examples/hello-world/hello.js",
+    },
+    {
+      "type": "pwa-node",
+      "request": "launch",
       "name": "Launch Simple Read Write",
       "skipFiles": [
         "<node_internals>/**"
