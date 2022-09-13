@@ -283,7 +283,6 @@ function _runProcedures(procedures) {
 }
 
 // END RUNTIME
-
 let printLine = new FileDescriptor(process.env["PRTLINE"])
 let acctRec = new FileDescriptor(process.env["ACCTREC"])
 printLine._loadVarSpec({
@@ -404,7 +403,7 @@ function openFiles() {
 }
 function readNextRecord() {
   readRecord()
-  while (!((lastrec == "Y"))) {
+  while (!((flags.lastrec == "Y"))) {
     writeRecord()
     readRecord()
   }
@@ -416,16 +415,16 @@ function closeStop() {
 }
 function readRecord() {
   acctRec._read(function () {
-    lastrec = "Y"
+    flags.lastrec = "Y"
   })
 }
 function writeRecord() {
-  acctNoO = acctNo
-  acctLimitO = acctLimit
-  acctBalanceO = acctBalance
-  lastNameO = lastName
-  firstNameO = firstName
-  commentsO = comments
+  printLine.printRec.acctNoO = acctRec.acctFields.acctNo
+  printLine.printRec.acctLimitO = acctRec.acctFields.acctLimit
+  printLine.printRec.acctBalanceO = acctRec.acctFields.acctBalance
+  printLine.printRec.lastNameO = acctRec.acctFields.lastName
+  printLine.printRec.firstNameO = acctRec.acctFields.firstName
+  printLine.printRec.commentsO = acctRec.acctFields.comments
   printRec._write()
 }
 const __PROCEDURES__ = [
