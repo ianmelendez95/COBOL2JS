@@ -21,11 +21,15 @@ import qualified Data.Text.IO as TIO
 import Data.Text.Util
 
 import Control.Monad.State
-import Control.Monad.Reader
 
 import qualified COBOL
 import qualified COBOL.Keyword
 import qualified JS
+
+-- import Debug.Trace
+
+trace :: String -> a -> a
+trace _ = id
 
 -- VarSpec
 
@@ -33,7 +37,7 @@ data VarSpec = VSComp T.Text [VarSpec]
              | VSData T.Text VarSpecFmt (Maybe JS.Value)
 
 data VarSpecFmt = VSFString Int
-                | VSFBinDec Int Int
+                | VSFBinDec Int Int  -- length wholeNumbers
 
 varSpecName :: VarSpec -> T.Text
 varSpecName (VSComp name _) = name
@@ -167,6 +171,10 @@ fmt2VarSpecCont (COBOL.RFmt chars COBOL.RDisplay) =
   where 
     isDisplayChar :: COBOL.RFmtChar -> Bool
     isDisplayChar COBOL.RFAlphaNum = True
+    isDisplayChar COBOL.RFNum      = True
+    isDisplayChar COBOL.RFCurrency = True
+    isDisplayChar COBOL.RFDecPer   = True
+    isDisplayChar COBOL.RFComma    = True
     isDisplayChar _ = False
 
 -- http://www.3480-3590-data-conversion.com/article-packed-fields.html
