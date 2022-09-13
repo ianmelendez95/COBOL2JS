@@ -425,7 +425,7 @@ function writeRecord() {
   printLine.printRec.lastNameO = acctRec.acctFields.lastName
   printLine.printRec.firstNameO = acctRec.acctFields.firstName
   printLine.printRec.commentsO = acctRec.acctFields.comments
-  printRec._write()
+  printLine._write()
 }
 const __PROCEDURES__ = [
   openFiles,
