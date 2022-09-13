@@ -45,17 +45,20 @@ type C2J = State C2JEnv
 
 type VarMap = Map T.Text T.Text
 
-newtype C2JEnv = C2JEnv 
+type FileRecMap = Map T.Text T.Text
+
+data C2JEnv = C2JEnv 
   { _envVarMap :: VarMap
+  , _fileDescs  :: FileRecMap  -- record var => file descriptor
   }
 
 makeLenses ''C2JEnv
 
 instance Semigroup C2JEnv where 
-  (C2JEnv m1) <> (C2JEnv m2) = C2JEnv (m1 <> m2)
+  (C2JEnv vars1 files1) <> (C2JEnv vars2 files2) = C2JEnv (vars1 <> vars2) (files1 <> files2)
 
 instance Monoid C2JEnv where 
-  mempty = C2JEnv mempty
+  mempty = C2JEnv mempty mempty
 
 
 c2jFile :: FilePath -> FilePath -> IO ()
@@ -115,6 +118,7 @@ fileDesc2js (COBOL.FileDesc name record) =
       load_call = JS.Call (JS.VarVal $ js_name <> "._loadVarSpec")
                           [JS.ObjVal $ varSpec2js var_spec]
    in do 
+        fileDescs  %=  Map.insert (varSpecName var_spec) js_name
         envVarMap <>= prefixVarMap js_name (varSpec2VarMap var_spec)
         pure $ JS.Expr load_call
 
@@ -222,8 +226,12 @@ statement2js (COBOL.Read var mstatements) =
   where 
     statements2func :: [COBOL.Statement] -> C2J [JS.Value]
     statements2func sts = singleton . JS.FunVal "" <$> traverse statement2js sts
-statement2js (COBOL.Write var) = 
-  JS.Expr <$> (JS.Call <$> (JS.VarVal <$> (var2js var <&> (<> "._write"))) <*> pure [])
+statement2js (COBOL.Write var) = do
+  js_var <- var2js var
+  mfd <- uses fileDescs (Map.lookup js_var) 
+  case mfd of 
+    Nothing -> error $ "No associated file descriptor for var: " ++ T.unpack var
+    Just fd -> pure $ JS.Expr (JS.Call (JS.VarVal (fd <> "._write")) [])
 statement2js (COBOL.Perform var) = 
   JS.Expr <$> (JS.Call <$> (JS.VarVal <$> var2js var) <*> pure [])
 statement2js (COBOL.PerformUntil cond sts) = 

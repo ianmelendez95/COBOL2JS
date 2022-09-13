@@ -276,7 +276,7 @@ function _runProcedures(procedures) {
     let procRes = proc()
 
     if (procRes === 'GOBACK') {
-      console.log("TRACE asked to 'go back'")
+      // console.log("TRACE asked to 'go back'")
       break;
     }
   }
