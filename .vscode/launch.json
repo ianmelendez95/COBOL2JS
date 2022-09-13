@@ -30,5 +30,18 @@
         "PRTLINE": "js/test-decode/prtline"
       }
     },
+    {
+      "type": "pwa-node",
+      "request": "launch",
+      "name": "Launch Simple Read Write",
+      "skipFiles": [
+        "<node_internals>/**"
+      ],
+      "program": "${workspaceFolder}/examples/simple-read-write/rw.js",
+      "env": {
+        "ACCTREC": "examples/simple-read-write/data",
+        "PRTLINE": "examples/simple-read-write/prtline"
+      }
+    },
   ]
 }
