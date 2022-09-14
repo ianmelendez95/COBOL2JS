@@ -324,7 +324,7 @@ procedureDivision = do
 
 paragraph :: Parser Para
 paragraph = traceM "BEG PARAS" >> choice 
-  [ Para . Just <$> (identifier <* period) <*> (traceM "PARA NAMED" >> some sentence)
+  [ Para . Just <$> (identifier <* period) <*> (traceM "PARA NAMED" >> many sentence)
   , Para Nothing                     <$> (traceM "PARA ANON" >> some sentence)
   ]
 
