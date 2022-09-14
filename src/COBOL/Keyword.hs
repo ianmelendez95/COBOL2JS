@@ -52,6 +52,7 @@ data Keyword = KDivision
              | KDisplay 
              | KMove 
              | KTo 
+             | KFunction
              | KCompute
              | KPerform
              | KUntil

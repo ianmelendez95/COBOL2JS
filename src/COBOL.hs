@@ -156,6 +156,7 @@ data Cond = Cond Value IOp Value
 data Value = VarVal T.Text
            | NumVal Int
            | StrVal T.Text
+           | FunCall T.Text
 
 -- Show Instances
 
@@ -195,6 +196,7 @@ instance Show Value where
   show (VarVal t) = T.unpack t
   show (NumVal n) = show n
   show (StrVal s) = "\"" ++ T.unpack s ++ "\""
+  show (FunCall f) = "FUNCTION " ++ T.unpack f
 
 arithValToValue :: AVal -> Value
 arithValToValue (AVar v) = VarVal v
@@ -419,6 +421,7 @@ value = choice
   , VarVal     <$> identifier
   , NumVal 0   <$  keyword KZero
   , StrVal " " <$  keyword KSpace
+  , FunCall    <$> (keyword KFunction >> identifier) 
   ]
 
 infixOp :: Parser IOp
