@@ -26,6 +26,7 @@ source-repository head
 library
   exposed-modules:
       COBOL
+      COBOL.Interpreter
       COBOL.Keyword
       COBOL2JS
       Data.Text.Util
