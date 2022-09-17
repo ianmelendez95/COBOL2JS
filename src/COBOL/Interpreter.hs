@@ -1,7 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
 
-module COBOL.Interpreter where 
+module COBOL.Interpreter
+  ( interpretFile 
+  ) where 
 
 import Control.Lens
 
@@ -9,18 +11,45 @@ import Control.Monad.State.Lazy
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
 
+import Data.Maybe
+
 import Data.Map (Map)
 import qualified Data.Map as Map
 
 import Data.Text.Util
-import COBOL
+import qualified COBOL.Syntax as S
 
 type CI = StateT CIEnv IO
 
-data CIEnv = CIEnv 
-  { _envVars :: Map T.Text Value
-  }
+data Value = StrVal T.Text
+           | DecVal Double
+           deriving Show
 
+data Data = StrData Int     T.Text  -- length              - value
+          | DecData Int Int Double  -- digits whole-digits - value
+          deriving Show
+
+dataValue :: Data -> Value
+dataValue (StrData _ v)   = StrVal v
+dataValue (DecData _ _ v) = DecVal v
+
+-- class IsData a where 
+--   toData :: a -> Data
+
+-- instance IsData Double where 
+--   toData :: Double -> Data
+--   toData = 
+
+setValue :: Value -> Data -> Data
+setValue (StrVal v) (StrData l _)   = StrData l v
+setValue (DecVal n) (DecData d w _) = DecData d w n
+setValue v d = error $ "Incompatible types, cannot set (" ++ show d ++ ") to (" ++ show v ++ ")"
+
+type VarMap = Map T.Text Data
+
+newtype CIEnv = CIEnv 
+  { _envVars :: VarMap
+  }
 makeLenses ''CIEnv
 
 instance Semigroup CIEnv where 
@@ -29,63 +58,157 @@ instance Semigroup CIEnv where
 instance Monoid CIEnv where 
   mempty = CIEnv mempty
 
+lookupData :: T.Text -> VarMap -> Maybe Data
+lookupData = Map.lookup
+  -- maybe (error $ "Undefined variable: " ++ show v) valueValue (Map.lookup v m)
+
+insertValue :: T.Text -> Value -> VarMap -> VarMap
+insertValue k v = Map.alter alterVal k
+  where 
+    alterVal :: Maybe Data -> Maybe Data
+    alterVal Nothing      = error $ "Undefined variable: " ++ show k
+    alterVal (Just vdata) = Just $ setValue v vdata
+
+insertData :: T.Text -> Data -> VarMap -> VarMap
+insertData = Map.insert
 
 interpretFile :: FilePath -> IO ()
-interpretFile file = COBOL.readFile file >>= interpret 
+interpretFile file = S.readFile file >>= interpret 
 
-interpret :: Prog -> IO ()
+interpret :: S.Prog -> IO ()
 interpret prog = evalStateT (runProg prog) mempty
 
-runProg :: Prog -> CI ()
-runProg (Prog _ _ _ proc_div) = runProcDiv proc_div
+runProg :: S.Prog -> CI ()
+runProg (S.Prog _ _ data_div proc_div) = do 
+  initDataDiv data_div
+  runProcDiv proc_div
 
-runProcDiv :: ProcDiv -> CI ()
+
+-- Data Divison
+
+initDataDiv :: S.DataDiv -> CI ()
+initDataDiv (S.DataDiv _ storage) = mapM_ initStorageRecord storage
+
+initStorageRecord :: S.Record -> CI ()
+initStorageRecord (S.RGroup {}) = error "Compound records unsupported"
+initStorageRecord (S.RElem  _ name fmt msval) = do 
+  d <- initial_data
+  envVars %= Map.insert name d
+  where 
+    initial_data :: CI Data
+    initial_data = maybe fmt_data (`setValue` fmt_data) <$> mval
+    
+    fmt_data :: Data
+    fmt_data = formatToData fmt
+
+    mval :: CI (Maybe Value)
+    mval = traverse initialValue msval
+
+    initialValue :: S.Value -> CI Value
+    initialValue v = either id dataValue <$> evalValue v
+
+-- TODO improve format checking - check for invalid combinations
+formatToData :: S.RFmt -> Data
+formatToData (S.RFmt chars S.RDisplay) 
+  | S.RFAlphaNum `elem` chars = StrData (count isDisplayChar chars) ""
+  | otherwise                 = fmtCharsToDecData chars
+  where 
+    isDisplayChar :: S.RFmtChar -> Bool
+    isDisplayChar S.RFAlphaNum = True
+    isDisplayChar S.RFNum      = True
+    isDisplayChar S.RFCurrency = True
+    isDisplayChar S.RFDecPer   = True
+    isDisplayChar S.RFComma    = True
+    isDisplayChar _ = False
+
+formatToData (S.RFmt chars S.RComp3) = fmtCharsToDecData chars
+
+-- http://www.3480-3590-data-conversion.com/article-packed-fields.html
+fmtCharsToDecData :: [S.RFmtChar] -> Data
+fmtCharsToDecData chars = 
+  DecData (halfRoundUp $ count isDigitChar chars) 
+          (count isDigitChar (takeWhile (not . isDecimalChar) chars))
+          0.0
+  where 
+    isDigitChar :: S.RFmtChar -> Bool
+    isDigitChar S.RFNum = True
+    isDigitChar _ = False
+
+    isDecimalChar :: S.RFmtChar -> Bool
+    isDecimalChar S.RFDec = True
+    isDecimalChar _ = False
+
+    halfRoundUp :: Int -> Int
+    halfRoundUp x = ceiling (fromIntegral x / (2 :: Double))
+
+count :: (a -> Bool) -> [a] -> Int
+count f = length . filter f 
+
+
+-- Procedure Division
+
+runProcDiv :: S.ProcDiv -> CI ()
 runProcDiv = mapM_ runPara
 
-runPara :: Para -> CI ()
-runPara (Para _ sents) = mapM_ runSentence sents
+runPara :: S.Para -> CI ()
+runPara (S.Para _ sents) = mapM_ runSentence sents
 
-runSentence :: Sentence -> CI ()
+runSentence :: S.Sentence -> CI ()
 runSentence = mapM_ runStatement
 
-runStatement :: Statement -> CI ()
-runStatement GoBack = pure ()
-runStatement (Move val var) = envVars %= Map.insert var val
-runStatement (Compute var arith) = do
+runStatement :: S.Statement -> CI ()
+runStatement S.GoBack = pure ()
+runStatement (S.Move val var) = do
+  val' <- evalValue val
+  envVars %= either (insertValue var) (insertData var) val'
+runStatement (S.Compute var arith) = do
   arith_val <- runArith arith
-  envVars %= Map.insert var arith_val
-runStatement (Display values) = do
-  txts <- traverse valueText values
+  envVars %= insertValue var arith_val
+runStatement (S.Display svalues) = do
+  data_vals <- traverse evalValue svalues
+  let txts = map (either valueText dataText) data_vals
   lift $ mapM_ TIO.putStr txts >> putChar '\n'
 
-runArith :: Arith -> CI Value
-runArith (AVal val) = pure val
-runArith (ABin a1 aop a2) = 
-  arithOpFunc aop <$> (runArith a1 >>= evalValue) 
-                  <*> (runArith a2 >>= evalValue)
+varData :: T.Text -> CI Data
+varData var = do 
+  vdata <- uses envVars (Map.lookup var)
+  pure $ fromMaybe (error $ "Undefined variable: " ++ show var) vdata
+
+runArith :: S.Arith -> CI Value
+runArith (S.AVal val) = either id dataValue <$> evalValue val
+runArith (S.ABin a1 aop a2) = 
+  arithOpFunc aop <$> runArith a1 
+                  <*> runArith a2
   where
-    arithOpFunc :: IOp -> (Value -> Value -> Value)
-    arithOpFunc Mult = numValueFunc (*)  
-    arithOpFunc Add  = numValueFunc (+)  
+    arithOpFunc :: S.IOp -> (Value -> Value -> Value)
+    arithOpFunc S.Mult = numValueFunc (*)  
+    arithOpFunc S.Add  = numValueFunc (+)  
     arithOpFunc aop'  = error $ "Arithmetic does not support '" ++ show aop' ++ "' operator"
 
-    numValueFunc :: (Int -> Int -> Int) -> Value -> Value -> Value
-    numValueFunc f (NumVal x) (NumVal y) = NumVal $ f x y
-    numValueFunc _ (NumVal _) v = error $ "Second argument is not a number: " ++ show v
-    numValueFunc _ v _          = error $ "First argument is not a number: " ++ show v
+    numValueFunc :: (Double -> Double -> Double) -> Value -> Value -> Value
+    numValueFunc f (DecVal x) (DecVal y) = DecVal $ f x y
+    numValueFunc _ (DecVal _) v = error $ "Second argument is not a number: " ++ show v
+    numValueFunc _ v _          = error $ "First argument is not a number: "  ++ show v
 
-evalValue :: Value -> CI Value
-evalValue str@(StrVal _) = pure str
-evalValue num@(NumVal _) = pure num
-evalValue (VarVal var) = do 
-  mval <- uses envVars (Map.lookup var)
-  case mval of 
-    Nothing -> error $ "Var has no value: " ++ show var
-    Just (VarVal val) -> error $ "Var has var value: " ++ show var ++ " => " ++ show val
-    Just val -> pure val
+evalValue :: S.Value -> CI (Either Value Data)
+evalValue (S.StrVal str) = pure . Left $ StrVal str
+evalValue (S.NumVal num) = pure . Left $ DecVal num
+evalValue (S.VarVal var) = do 
+  mdata <- uses envVars (Map.lookup var)
+  pure . Right $ fromMaybe (error $ "Undefined variable: " ++ show var) mdata
 
-valueText :: Value -> CI T.Text
-valueText (StrVal txt) = pure txt
-valueText (NumVal n) = pure $ showT n
-valueText var@(VarVal _) = evalValue var >>= valueText
+dataText :: Data -> T.Text
+dataText (StrData l v)   = leftPad l v
+dataText (DecData _ _ v) = showT v
+
+leftPad :: Int -> T.Text -> T.Text
+leftPad n txt 
+  | n > len   = T.replicate (n - len) " " <> txt
+  | otherwise = txt
+  where 
+    len = T.length txt
+
+valueText :: Value -> T.Text
+valueText (StrVal v) = v
+valueText (DecVal v) = showT v
 

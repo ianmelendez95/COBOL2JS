@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module COBOL 
+module COBOL.Syntax
   ( Prog (..)
 
   , FileCtrl (..)
@@ -28,9 +28,11 @@ module COBOL
 
   , Cond (..)
 
-  , COBOL.readFile
+  , readFile
   , arithValToValue
   ) where 
+
+import Prelude hiding (readFile)
 
 import Control.Monad (void)
 import Data.Void
@@ -147,14 +149,14 @@ data IOp = Mult
          deriving Show
 
 data AVal = AVar T.Text
-          | ANum Int
+          | ANum Double
           deriving Show
 
 data Cond = Cond Value IOp Value
           deriving Show
 
 data Value = VarVal T.Text
-           | NumVal Int
+           | NumVal Double
            | StrVal T.Text
            | FunCall T.Text
 

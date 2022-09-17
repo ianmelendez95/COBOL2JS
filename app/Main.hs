@@ -1,7 +1,7 @@
 module Main (main) where
 
 import System.Environment
-import COBOL
+import qualified COBOL.Syntax as COBOL
 
 main :: IO ()
 main = do

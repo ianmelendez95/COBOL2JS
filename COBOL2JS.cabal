@@ -25,15 +25,12 @@ source-repository head
 
 library
   exposed-modules:
-      COBOL
       COBOL.Interpreter
       COBOL.Keyword
-      COBOL2JS
+      COBOL.Syntax
       Data.Text.Util
       Generic.GReadEnum
       Generic.GShowEnum
-      JS
-      JS.Runtime
       Lib
   other-modules:
       Paths_COBOL2JS
