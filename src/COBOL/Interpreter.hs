@@ -198,12 +198,12 @@ evalValue (S.VarVal var) = do
   pure . Right $ fromMaybe (error $ "Undefined variable: " ++ show var) mdata
 
 dataText :: Data -> T.Text
-dataText (StrData l v)   = leftPad l v
+dataText (StrData l v)   = rightPad l v
 dataText (DecData _ _ v) = showT v
 
-leftPad :: Int -> T.Text -> T.Text
-leftPad n txt 
-  | n > len   = T.replicate (n - len) " " <> txt
+rightPad :: Int -> T.Text -> T.Text
+rightPad n txt 
+  | n > len   = txt <> T.replicate (n - len) " " 
   | otherwise = txt
   where 
     len = T.length txt
