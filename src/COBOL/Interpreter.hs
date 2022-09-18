@@ -173,6 +173,8 @@ runStatement (S.Display svalues) = do
   data_vals <- traverse evalValue svalues
   let txts = map (either valueText dataText) data_vals
   lift $ mapM_ TIO.putStr txts >> putChar '\n'
+runStatement (S.Open _ _) = pure ()  -- do nothing, file handling is done on-demand
+runStatement s = error $ "statement unsupported: " ++ show s
 
 varData :: T.Text -> CI Data
 varData var = do 
