@@ -25,8 +25,9 @@ data Value = StrVal T.Text
            | DecVal Double
            deriving Show
 
-data Data = StrData Int     T.Text  -- length              - value
-          | DecData Int Int Double  -- digits whole-digits - value
+data Data = StrData Int     T.Text -- length              value
+          | DecData Int Int Double -- digits whole-digits value
+          | GroupData [T.Text]     -- children
           deriving Show
 
 dataValue :: Data -> Value
@@ -89,11 +90,15 @@ runProg (S.Prog _ _ data_div proc_div) = do
 initDataDiv :: S.DataDiv -> CI ()
 initDataDiv (S.DataDiv _ storage) = mapM_ initStorageRecord storage
 
-initStorageRecord :: S.Record -> CI ()
-initStorageRecord (S.RGroup {}) = error "Compound records unsupported"
+initStorageRecord :: S.Record -> CI T.Text
+initStorageRecord (S.RGroup _ name recs) = do
+  child_names <- traverse initStorageRecord recs 
+  envVars %= Map.insert name (GroupData child_names)
+  pure name
 initStorageRecord (S.RElem  _ name fmt msval) = do 
   d <- initial_data
   envVars %= Map.insert name d
+  pure name
   where 
     initial_data :: CI Data
     initial_data = maybe fmt_data (`setValue` fmt_data) <$> mval
