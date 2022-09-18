@@ -4,14 +4,14 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 
-name:           COBOL2JS
+name:           GBOL
 version:        0.1.0.0
-description:    Please see the README on GitHub at <https://github.com/githubuser/COBOL2JS#readme>
-homepage:       https://github.com/githubuser/COBOL2JS#readme
-bug-reports:    https://github.com/githubuser/COBOL2JS/issues
-author:         Author name here
-maintainer:     example@example.com
-copyright:      2022 Author name here
+description:    Please see the README on GitHub at <https://github.com/ianmelendez95/GBOL#readme>
+homepage:       https://github.com/ianmelendez95/GBOL#readme
+bug-reports:    https://github.com/ianmelendez95/GBOL/issues
+author:         Ian Melendez
+maintainer:     ian.melendez.95@gmail.com
+copyright:      2022 Ian Melendez
 license:        BSD3
 license-file:   LICENSE
 build-type:     Simple
@@ -21,7 +21,7 @@ extra-source-files:
 
 source-repository head
   type: git
-  location: https://github.com/githubuser/COBOL2JS
+  location: https://github.com/ianmelendez95/GBOL
 
 library
   exposed-modules:
@@ -33,7 +33,7 @@ library
       Generic.GShowEnum
       Lib
   other-modules:
-      Paths_COBOL2JS
+      Paths_GBOL
   hs-source-dirs:
       src
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
@@ -50,27 +50,27 @@ library
     , text
   default-language: Haskell2010
 
-executable COBOL2JS-exe
+executable gbol
   main-is: Main.hs
   other-modules:
-      Paths_COBOL2JS
+      Paths_GBOL
   hs-source-dirs:
       app
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-      COBOL2JS
+      GBOL
     , base >=4.7 && <5
   default-language: Haskell2010
 
-test-suite COBOL2JS-test
+test-suite gbol-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
-      Paths_COBOL2JS
+      Paths_GBOL
   hs-source-dirs:
       test
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-      COBOL2JS
+      GBOL
     , base >=4.7 && <5
   default-language: Haskell2010
