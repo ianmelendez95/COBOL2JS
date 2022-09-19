@@ -5,7 +5,7 @@ module COBOL.Interpreter
   ( interpretFile 
   ) where 
 
-import Control.Lens
+import Control.Lens hiding (para)
 
 import Control.Monad.State.Lazy
 import qualified Data.Text as T
@@ -48,20 +48,19 @@ setValue v d = error $ "Incompatible types, cannot set (" ++ show d ++ ") to (" 
 
 type VarMap = Map T.Text Data
 
-newtype CIEnv = CIEnv 
-  { _envVars :: VarMap
+type ParaMap = Map T.Text S.Para
+
+data CIEnv = CIEnv 
+  { _envVars    :: VarMap
+  , _envParas   :: ParaMap
   }
 makeLenses ''CIEnv
 
 instance Semigroup CIEnv where 
-  (CIEnv vars1) <> (CIEnv vars2) = CIEnv (vars1 <> vars2)
+  (CIEnv vars1 paras1) <> (CIEnv vars2 paras2) = CIEnv (vars1 <> vars2) (paras1 <> paras2)
 
 instance Monoid CIEnv where 
-  mempty = CIEnv mempty
-
-lookupData :: T.Text -> VarMap -> Maybe Data
-lookupData = Map.lookup
-  -- maybe (error $ "Undefined variable: " ++ show v) valueValue (Map.lookup v m)
+  mempty = CIEnv mempty mempty
 
 insertValue :: T.Text -> Value -> VarMap -> VarMap
 insertValue k v = Map.alter alterVal k
@@ -153,27 +152,49 @@ count f = length . filter f
 -- Procedure Division
 
 runProcDiv :: S.ProcDiv -> CI ()
-runProcDiv = mapM_ runPara
+runProcDiv proc_div = do 
+  mapM_ loadPara proc_div
+  mapM_ runPara proc_div
 
-runPara :: S.Para -> CI ()
-runPara (S.Para _ sents) = mapM_ runSentence sents
+loadPara :: S.Para -> CI T.Text
+loadPara para@(S.Para mname _) = do 
+  name <- resolveName mname
+  envParas %= Map.insert name para
+  pure name
+  where 
+    resolveName :: Maybe T.Text -> CI T.Text
+    resolveName (Just name) = pure name
+    resolveName Nothing = do
+      para_count <- uses envParas Map.size
+      pure $ "MAIN-" <> showT para_count
 
-runSentence :: S.Sentence -> CI ()
-runSentence = mapM_ runStatement
+runPara :: S.Para -> CI Bool
+runPara (S.Para _ sents) = mapMWhile_ runSentence sents
 
-runStatement :: S.Statement -> CI ()
-runStatement S.GoBack = pure ()
+runSentence :: S.Sentence -> CI Bool
+runSentence = mapMWhile_ runStatement
+
+runStatement :: S.Statement -> CI Bool
+runStatement S.GoBack = pure False  -- TODO - should actually end the program (https://www.ibm.com/docs/en/i/7.3?topic=statements-goback-statement)
 runStatement (S.Move val var) = do
   val' <- evalValue val
   envVars %= either (insertValue var) (insertData var) val'
+  pure True
 runStatement (S.Compute var arith) = do
   arith_val <- runArith arith
   envVars %= insertValue var arith_val
+  pure True
 runStatement (S.Display svalues) = do
   data_vals <- traverse evalValue svalues
   let txts = map (either valueText dataText) data_vals
   lift $ mapM_ TIO.putStr txts >> putChar '\n'
-runStatement (S.Open _ _) = pure ()  -- do nothing, file handling is done on-demand
+  pure True
+runStatement (S.Open _ _) = pure True  -- do nothing, file handling is done on-demand
+runStatement (S.Perform name) = do 
+  mpara <- uses envParas (Map.lookup name)
+  case mpara of 
+    Nothing -> error $ "PERFORM - no paragraph with name: " ++ show name
+    Just para -> runPara para
 runStatement s = error $ "statement unsupported: " ++ show s
 
 varData :: T.Text -> CI Data
@@ -219,3 +240,9 @@ valueText :: Value -> T.Text
 valueText (StrVal v) = v
 valueText (DecVal v) = showT v
 
+
+mapMWhile_ :: (a -> CI Bool) -> [a] -> CI Bool
+mapMWhile_ _ [] = pure True
+mapMWhile_ f (x:xs) = do 
+  res <- f x
+  if res then mapMWhile_ f xs else pure False
