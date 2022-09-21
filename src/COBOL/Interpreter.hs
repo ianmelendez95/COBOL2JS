@@ -1,11 +1,14 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TupleSections #-}
 
 module COBOL.Interpreter
   ( interpretFile 
   ) where 
 
 import Control.Lens hiding (para)
+
+import System.IO
 
 import Control.Monad.State.Lazy
 import qualified Data.Text as T
@@ -15,14 +18,42 @@ import Data.Maybe
 
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Bimap (Bimap)
+import qualified Data.Bimap as Bimap
 
 import Data.Text.Util
 import qualified COBOL.Syntax as S
+import qualified COBOL.EBCDIC as E
+
+import Debug.Trace
+
+-- COBOL Interpreter Environment
 
 type CI = StateT CIEnv IO
 
+data CIEnv = CIEnv 
+  { _envFds     :: FdMap     -- File Descriptors (FDs) by name
+  , _envVars    :: VarMap    -- Variables by name
+  , _envFdVars  :: FdVarMap  -- FD to Var bi-directional mapping by name
+  , _envParas   :: ParaMap   -- Paragraphs by name
+  }
+
+type FdMap    = Map   T.Text Fd
+type VarMap   = Map   T.Text Data
+type FdVarMap = Bimap T.Text T.Text
+
+type ParaMap  = Map   T.Text S.Para
+
+instance Semigroup CIEnv where 
+  (CIEnv fds1 vars1 fvs1 paras1) <> (CIEnv fds2 vars2 fvs2 paras2) = 
+    CIEnv (fds1 <> fds2) (vars1 <> vars2) (fvs1 `bimapConcat` fvs2) (paras1 <> paras2)
+
+instance Monoid CIEnv where 
+  mempty = CIEnv mempty mempty Bimap.empty mempty
+
 data Value = StrVal T.Text
            | DecVal Double
+           | GroupVal [T.Text]
            deriving Show
 
 data Data = StrData Int     T.Text -- length              value
@@ -30,37 +61,14 @@ data Data = StrData Int     T.Text -- length              value
           | GroupData [T.Text]     -- children
           deriving Show
 
-dataValue :: Data -> Value
-dataValue (StrData _ v)   = StrVal v
-dataValue (DecData _ _ v) = DecVal v
+data Fd = Fd FilePath (Maybe Handle)  -- filename fd-handle
 
--- class IsData a where 
---   toData :: a -> Data
+type FileAssoc = [(String, FilePath)]
 
--- instance IsData Double where 
---   toData :: Double -> Data
---   toData = 
+bimapConcat :: (Ord a, Ord b) => Bimap a b -> Bimap a b -> Bimap a b
+bimapConcat m1 m2 = Bimap.fromList (Bimap.toList m1 <> Bimap.toList m2)
 
-setValue :: Value -> Data -> Data
-setValue (StrVal v) (StrData l _)   = StrData l v
-setValue (DecVal n) (DecData d w _) = DecData d w n
-setValue v d = error $ "Incompatible types, cannot set (" ++ show d ++ ") to (" ++ show v ++ ")"
-
-type VarMap = Map T.Text Data
-
-type ParaMap = Map T.Text S.Para
-
-data CIEnv = CIEnv 
-  { _envVars    :: VarMap
-  , _envParas   :: ParaMap
-  }
 makeLenses ''CIEnv
-
-instance Semigroup CIEnv where 
-  (CIEnv vars1 paras1) <> (CIEnv vars2 paras2) = CIEnv (vars1 <> vars2) (paras1 <> paras2)
-
-instance Monoid CIEnv where 
-  mempty = CIEnv mempty mempty
 
 insertValue :: T.Text -> Value -> VarMap -> VarMap
 insertValue k v = Map.alter alterVal k
@@ -72,22 +80,79 @@ insertValue k v = Map.alter alterVal k
 insertData :: T.Text -> Data -> VarMap -> VarMap
 insertData = Map.insert
 
-interpretFile :: FilePath -> IO ()
-interpretFile file = S.readFile file >>= interpret 
+dataValue :: Data -> Value
+dataValue (StrData _ v)   = StrVal v
+dataValue (DecData _ _ v) = DecVal v
+dataValue (GroupData v)   = GroupVal v
 
-interpret :: S.Prog -> IO ()
-interpret prog = evalStateT (runProg prog) mempty
+setValue :: Value -> Data -> Data
+setValue (StrVal v) (StrData l _)   = StrData l v
+setValue (DecVal n) (DecData d w _) = DecData d w n
+setValue v d = error $ "Incompatible types, cannot set (" ++ show d ++ ") to (" ++ show v ++ ")"
 
-runProg :: S.Prog -> CI ()
-runProg (S.Prog _ _ data_div proc_div) = do 
+getFd :: T.Text -> CI Fd
+getFd fd_name = 
+  uses envFds    (lookupFailing "No FD for: " fd_name)
+
+getVarNameByFd :: T.Text -> CI T.Text
+getVarNameByFd fd_name = 
+  uses envFdVars (bilookupFailing "No var for FD: " fd_name)
+
+getVarData :: T.Text -> CI Data
+getVarData vname = 
+  uses envVars   (lookupFailing "No data for var: " vname)
+
+lookupFailing :: (Ord a, Show a) => String -> a -> Map a b -> b
+lookupFailing msg_pre key m = 
+  case Map.lookup key m of 
+    Nothing -> error $ msg_pre ++ show key
+    Just v  -> v
+  
+bilookupFailing :: (Ord a, Ord b, Show a) => String -> a -> Bimap a b -> b
+bilookupFailing msg_pre key m = 
+  case Bimap.lookup key m of 
+    Nothing -> error $ msg_pre ++ show key
+    Just v  -> v
+
+-- Interpret
+
+interpretFile :: FileAssoc -> FilePath -> IO ()
+interpretFile inputs file = S.readFile file >>= interpret inputs
+
+interpret :: FileAssoc -> S.Prog -> IO ()
+interpret inputs prog = evalStateT (runProg inputs prog) mempty
+
+runProg :: FileAssoc -> S.Prog -> CI ()
+runProg inputs (S.Prog _ env_div data_div proc_div) = do 
+  initEnvDiv  inputs env_div
   initDataDiv data_div
-  runProcDiv proc_div
+  runProcDiv  proc_div
 
+-- Environment Division
+
+initEnvDiv :: FileAssoc -> S.EnvDiv -> CI ()
+initEnvDiv inputs = mapM_ initFileCtrl
+  where 
+    initFileCtrl :: S.FileCtrl -> CI ()
+    initFileCtrl (S.FCSelect name src) = 
+      case Map.lookup src input_map of 
+        Nothing -> error $ "No input associated with name: " ++ show src
+        Just fname -> envFds %= Map.insert name (Fd fname Nothing)
+
+    input_map :: Map T.Text String
+    input_map = Map.fromList (over (each._1) T.pack inputs)
 
 -- Data Divison
 
 initDataDiv :: S.DataDiv -> CI ()
-initDataDiv (S.DataDiv _ storage) = mapM_ initStorageRecord storage
+initDataDiv (S.DataDiv file_descs storage) = do
+  mapM_ initFileDescriptor file_descs
+  mapM_ initStorageRecord storage
+
+initFileDescriptor :: S.FileDesc -> CI ()
+initFileDescriptor (S.FileDesc fd_name record) = do 
+  rec_name <- initStorageRecord record
+  envFdVars %= Bimap.insert fd_name rec_name
 
 initStorageRecord :: S.Record -> CI T.Text
 initStorageRecord (S.RGroup _ name recs) = do
@@ -169,10 +234,10 @@ loadPara para@(S.Para mname _) = do
       pure $ "MAIN-" <> showT para_count
 
 runPara :: S.Para -> CI Bool
-runPara (S.Para _ sents) = mapMWhile_ runSentence sents
+runPara (S.Para _ sents) = mapMWhile runSentence sents
 
 runSentence :: S.Sentence -> CI Bool
-runSentence = mapMWhile_ runStatement
+runSentence = mapMWhile runStatement
 
 runStatement :: S.Statement -> CI Bool
 runStatement S.GoBack = pure False  -- TODO - should actually end the program (https://www.ibm.com/docs/en/i/7.3?topic=statements-goback-statement)
@@ -189,7 +254,8 @@ runStatement (S.Display svalues) = do
   let txts = map (either valueText dataText) data_vals
   lift $ mapM_ TIO.putStr txts >> putChar '\n'
   pure True
-runStatement (S.Open _ _) = pure True  -- do nothing, file handling is done on-demand
+runStatement (S.Open mode name) = runOpenFd mode name >> pure True
+runStatement (S.Read fd_name on_eof) = runReadFd fd_name on_eof
 runStatement (S.Perform name) = do 
   mpara <- uses envParas (Map.lookup name)
   case mpara of 
@@ -197,10 +263,54 @@ runStatement (S.Perform name) = do
     Just para -> runPara para
 runStatement s = error $ "statement unsupported: " ++ show s
 
-varData :: T.Text -> CI Data
-varData var = do 
-  vdata <- uses envVars (Map.lookup var)
-  pure $ fromMaybe (error $ "Undefined variable: " ++ show var) vdata
+runOpenFd :: S.IOMode -> T.Text -> CI ()
+runOpenFd mode fd_name = do 
+  fd <- getFd fd_name
+  case fd of 
+    (Fd _ (Just _)) -> error $ "OPEN: FD already open: " ++ show fd_name
+    (Fd fname Nothing)  -> do
+      handle <- lift $ openFile fname io_mode
+      envFds %= Map.insert fd_name (Fd fname (Just handle))
+  where 
+    io_mode :: IOMode
+    io_mode = 
+      case mode of 
+        S.Input  -> ReadMode
+        S.Output -> WriteMode
+
+runReadFd :: T.Text -> Maybe [S.Statement] -> CI Bool
+runReadFd fd_name msts = do 
+  fd <- getFd fd_name
+  case fd of 
+    (Fd _ Nothing) -> error $ "READ: FD not open: " ++ show fd_name
+    (Fd _ (Just handle)) -> do 
+      var_name  <- getVarNameByFd fd_name
+      vdata     <- getVarData var_name
+      readData handle var_name vdata
+      handleEOF handle
+  where 
+    handleEOF :: Handle -> CI Bool
+    handleEOF handle = do
+      is_eof <- lift $ hIsEOF handle
+      if is_eof 
+        then maybe (pure True) (mapMWhile runStatement) msts
+        else pure True
+
+readData :: Handle -> T.Text -> Data -> CI ()
+readData h vname (StrData n _)   = do 
+  txt <- lift $ E.readText h n
+  envVars %= Map.insert vname (StrData n txt)
+readData h vname (DecData d w _) = do
+  dec <- lift $ E.readComp3 h d w
+  envVars %= Map.insert vname (DecData d w dec)
+readData h _ (GroupData child_names)  = do
+  mapM_ byName child_names
+  where 
+    byName :: T.Text -> CI ()
+    byName vname = do 
+      vdata <- getVarData vname
+      readData h vname vdata
+
 
 runArith :: S.Arith -> CI Value
 runArith (S.AVal val) = either id dataValue <$> evalValue val
@@ -241,8 +351,8 @@ valueText (StrVal v) = v
 valueText (DecVal v) = showT v
 
 
-mapMWhile_ :: (a -> CI Bool) -> [a] -> CI Bool
-mapMWhile_ _ [] = pure True
-mapMWhile_ f (x:xs) = do 
+mapMWhile :: (a -> CI Bool) -> [a] -> CI Bool
+mapMWhile _ [] = pure True
+mapMWhile f (x:xs) = do 
   res <- f x
-  if res then mapMWhile_ f xs else pure False
+  if res then mapMWhile f xs else pure False

@@ -7,6 +7,7 @@ module COBOL.Syntax
 
   , DataDiv (..)
   , ProcDiv
+  , EnvDiv
 
   , FileDesc (..)
   , Record (..)
@@ -20,7 +21,7 @@ module COBOL.Syntax
   , Statement (..)
   , Value (..)
 
-  , Put (..)
+  , IOMode (..)
 
   , Arith (..)
   , AVal (..)
@@ -127,7 +128,7 @@ type Sentence = [Statement]
 data Statement = Display [Value]
                | Move Value T.Text
                | Compute T.Text Arith
-               | Open Put T.Text
+               | Open IOMode T.Text
                | Close T.Text
                | Read T.Text (Maybe [Statement])
                | Write T.Text
@@ -136,8 +137,9 @@ data Statement = Display [Value]
                | GoBack
                deriving Show
 
-data Put = Input | Output 
-         deriving Show
+data IOMode = Input 
+            | Output 
+            deriving Show
               
 data Arith = AVal Value
            | ABin Arith IOp Arith 

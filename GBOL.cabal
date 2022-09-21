@@ -25,10 +25,12 @@ source-repository head
 
 library
   exposed-modules:
+      COBOL.EBCDIC
       COBOL.Interpreter
       COBOL.Keyword
       COBOL.Syntax
       Data.Text.Util
+      Debug.Trace.Util
       Generic.GReadEnum
       Generic.GShowEnum
       Lib
@@ -39,6 +41,7 @@ library
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
   build-depends:
       base >=4.7 && <5
+    , bimap
     , bytestring
     , containers
     , file-embed
