@@ -94,6 +94,13 @@ getFd :: T.Text -> CI Fd
 getFd fd_name = 
   uses envFds    (lookupFailing "No FD for: " fd_name)
 
+getFdByVarName :: T.Text -> CI Fd
+getFdByVarName var_name = getFdNameByVar var_name >>= getFd 
+
+getFdNameByVar :: T.Text -> CI T.Text
+getFdNameByVar var_name = 
+  uses envFdVars (bilookupFailingR "No FD for var: " var_name)
+
 getVarNameByFd :: T.Text -> CI T.Text
 getVarNameByFd fd_name = 
   uses envFdVars (bilookupFailing "No var for FD: " fd_name)
@@ -114,6 +121,12 @@ lookupFailing msg_pre key m =
 bilookupFailing :: (Ord a, Ord b, Show a) => String -> a -> Bimap a b -> b
 bilookupFailing msg_pre key m = 
   case Bimap.lookup key m of 
+    Nothing -> error $ msg_pre ++ show key
+    Just v  -> v
+
+bilookupFailingR :: (Ord a, Ord b, Show b) => String -> b -> Bimap a b -> a
+bilookupFailingR msg_pre key m = 
+  case Bimap.lookupR key m of 
     Nothing -> error $ msg_pre ++ show key
     Just v  -> v
 
@@ -237,10 +250,10 @@ loadPara para@(S.Para mname _) = do
       pure $ "MAIN-" <> showT para_count
 
 runPara :: S.Para -> CI Bool
-runPara (S.Para _ sents) = mapMWhile runSentence sents
+runPara (S.Para name sents) = trace ("PARAGRAPH: " ++ show name) mapMWhile runSentence sents
 
 runSentence :: S.Sentence -> CI Bool
-runSentence = mapMWhile runStatement
+runSentence = mapMWhile (\s -> trace ("STATEMENT: " ++ show s) (runStatement s))
 
 runStatement :: S.Statement -> CI Bool
 runStatement S.GoBack = pure False  -- TODO - should actually end the program (https://www.ibm.com/docs/en/i/7.3?topic=statements-goback-statement)
@@ -254,12 +267,13 @@ runStatement (S.Compute var arith) = do
   pure True
 runStatement (S.Display svalues) = do
   data_vals <- traverse evalValue svalues
-  let txts = map (either valueText dataText) data_vals
+  txts <- traverse (either valueText dataText) data_vals
   lift $ mapM_ TIO.putStr txts >> putChar '\n'
   pure True
 runStatement (S.Open mode name) = runOpenFd mode name >> pure True
 runStatement (S.Close name)     = runCloseFd name     >> pure True
 runStatement (S.Read fd_name on_eof) = runReadFd fd_name on_eof
+runStatement (S.Write var)           = runWrite var >> pure True
 runStatement (S.Perform name) = do 
   mpara <- uses envParas (Map.lookup name)
   case mpara of 
@@ -307,7 +321,7 @@ runReadFd fd_name msts = do
     handleEOF handle = do
       is_eof <- lift $ hIsEOF handle
       if is_eof 
-        then maybe (pure True) (mapMWhile runStatement) msts
+        then maybe (pure True) runSentence msts
         else pure True
 
 readData :: Handle -> T.Text -> Data -> CI ()
@@ -324,6 +338,12 @@ readData h _ (GroupData child_names)  = do
     byName vname = do 
       vdata <- getVarData vname
       readData h vname vdata
+
+runWrite :: T.Text -> CI ()
+runWrite var_name = do 
+  (Fd _ (Just handle)) <- getFdByVarName var_name
+  txt <- getVarData var_name >>= dataText
+  lift $ TIO.hPutStrLn handle txt
 
 performUntil :: S.Cond -> [S.Statement] -> CI Bool
 performUntil cond sts = do 
@@ -379,9 +399,11 @@ evalValue (S.VarVal var) = do
   mdata <- uses envVars (Map.lookup var)
   pure . Right $ fromMaybe (error $ "Undefined variable: " ++ show var) mdata
 
-dataText :: Data -> T.Text
-dataText (StrData l v)   = rightPad l v
-dataText (DecData _ _ v) = showT v
+dataText :: Data -> CI T.Text
+dataText (StrData l v)   = pure $ rightPad l v
+dataText (DecData _ _ v) = pure $ showT v
+dataText (GroupData cnames) = 
+  T.concat <$> traverse (getVarData >=> dataText) cnames
 
 rightPad :: Int -> T.Text -> T.Text
 rightPad n txt 
@@ -390,9 +412,11 @@ rightPad n txt
   where 
     len = T.length txt
 
-valueText :: Value -> T.Text
-valueText (StrVal v) = v
-valueText (DecVal v) = showT v
+valueText :: Value -> CI T.Text
+valueText (StrVal v) = pure v
+valueText (DecVal v) = pure $ showT v
+valueText (GroupVal cnames) = 
+  T.concat <$> traverse (getVarData >=> dataText) cnames
 
 
 mapMWhile :: (a -> CI Bool) -> [a] -> CI Bool
