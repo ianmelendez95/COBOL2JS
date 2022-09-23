@@ -22,6 +22,8 @@ import Data.Bits (Bits ((.&.), shiftR))
 
 import Data.Ratio
 
+import Debug.Trace
+
 -- TODO could be more performant if use BS.map and T.decodeUtf8 (possibly less readable/debuggable though)
 readText :: Handle -> Int -> IO T.Text
 readText h n = do 
@@ -106,7 +108,7 @@ getDecodedChar w =
 
 decode_map :: IntMap Char
 decode_map =  IntMap.fromList 
-  [ (0x40, 's')
+  [ (0x40, ' ')
   , (0x4B, '.')
   , (0x4E, '+')
 

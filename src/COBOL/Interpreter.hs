@@ -9,8 +9,10 @@ module COBOL.Interpreter
 import Control.Lens hiding (para)
 
 import System.IO
+    ( hClose, hIsEOF, openFile, Handle, IOMode(WriteMode, ReadMode) )
 
 import Control.Monad.State.Lazy
+    ( (>=>), zipWithM, StateT, MonadTrans(lift), evalStateT )
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
 
@@ -25,7 +27,7 @@ import Data.Text.Util
 import qualified COBOL.Syntax as S
 import qualified COBOL.EBCDIC as E
 
-import Debug.Trace.Disable
+import Debug.Trace
 
 -- COBOL Interpreter Environment
 
@@ -250,10 +252,10 @@ loadPara para@(S.Para mname _) = do
       pure $ "MAIN-" <> showT para_count
 
 runPara :: S.Para -> CI Bool
-runPara (S.Para name sents) = trace ("PARAGRAPH: " ++ show name) mapMWhile runSentence sents
+runPara (S.Para _ sents) = mapMWhile runSentence sents
 
 runSentence :: S.Sentence -> CI Bool
-runSentence = mapMWhile (\s -> trace ("STATEMENT: " ++ show s) (runStatement s))
+runSentence = mapMWhile runStatement
 
 runStatement :: S.Statement -> CI Bool
 runStatement S.GoBack = pure False  -- TODO - should actually end the program (https://www.ibm.com/docs/en/i/7.3?topic=statements-goback-statement)
@@ -425,4 +427,4 @@ mapMWhile :: (a -> CI Bool) -> [a] -> CI Bool
 mapMWhile _ [] = pure True
 mapMWhile f (x:xs) = do 
   res <- f x
-  if trace ("TRACE res: " ++ show res) res then mapMWhile f xs else pure False
+  if res then mapMWhile f xs else pure False
