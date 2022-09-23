@@ -61,6 +61,8 @@
 # Ignore some builtin hints
 # - ignore: {name: Use let}
 # - ignore: {name: Use const, within: SpecialModule} # Only within certain modules
+
+# Sometimes use snake case for top-level values
 - ignore: {name: Use camelCase}
 
 

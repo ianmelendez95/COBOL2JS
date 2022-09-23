@@ -102,6 +102,9 @@ getVarData :: T.Text -> CI Data
 getVarData vname = 
   uses envVars   (lookupFailing "No data for var: " vname)
 
+getVarValue :: T.Text -> CI Value
+getVarValue vname = dataValue <$> getVarData vname
+
 lookupFailing :: (Ord a, Show a) => String -> a -> Map a b -> b
 lookupFailing msg_pre key m = 
   case Map.lookup key m of 
@@ -261,6 +264,7 @@ runStatement (S.Perform name) = do
   case mpara of 
     Nothing -> error $ "PERFORM - no paragraph with name: " ++ show name
     Just para -> runPara para
+runStatement (S.PerformUntil cond sts) = performUntil cond sts
 runStatement s = error $ "statement unsupported: " ++ show s
 
 runOpenFd :: S.IOMode -> T.Text -> CI ()
@@ -311,6 +315,32 @@ readData h _ (GroupData child_names)  = do
       vdata <- getVarData vname
       readData h vname vdata
 
+performUntil :: S.Cond -> [S.Statement] -> CI Bool
+performUntil cond sts = do 
+  cond_res <- runCond cond
+  if not cond_res
+    then pure True
+    else do 
+      run_res <- runSentence sts
+      if not run_res
+        then pure False
+        else performUntil cond sts
+
+runCond :: S.Cond -> CI Bool
+runCond (S.Cond sv1 S.IEq sv2) = do 
+  v1 <- evalCValueToValue sv1
+  v2 <- evalCValueToValue sv2
+  valuesEqual v1 v2
+runCond (S.Cond _ cop _) = error $ "Not a valid conditional operator: " ++ show cop  -- caught in parsing
+
+valuesEqual :: Value -> Value -> CI Bool
+valuesEqual (StrVal s1) (StrVal s2) = pure $ s1 == s2
+valuesEqual (DecVal n1) (DecVal n2) = pure $ n1 == n2
+valuesEqual (GroupVal c_ns1) (GroupVal c_ns2) = do
+  cs1 <- traverse getVarValue c_ns1
+  cs2 <- traverse getVarValue c_ns2
+  and <$> zipWithM valuesEqual cs1 cs2
+valuesEqual _ _ = pure False
 
 runArith :: S.Arith -> CI Value
 runArith (S.AVal val) = either id dataValue <$> evalValue val
@@ -327,6 +357,10 @@ runArith (S.ABin a1 aop a2) =
     numValueFunc f (DecVal x) (DecVal y) = DecVal $ f x y
     numValueFunc _ (DecVal _) v = error $ "Second argument is not a number: " ++ show v
     numValueFunc _ v _          = error $ "First argument is not a number: "  ++ show v
+
+-- eval "COBOL" value to internal value
+evalCValueToValue :: S.Value -> CI Value
+evalCValueToValue v = either id dataValue <$> evalValue v
 
 evalValue :: S.Value -> CI (Either Value Data)
 evalValue (S.StrVal str) = pure . Left $ StrVal str
