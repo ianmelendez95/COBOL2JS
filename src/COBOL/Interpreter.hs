@@ -25,7 +25,7 @@ import Data.Text.Util
 import qualified COBOL.Syntax as S
 import qualified COBOL.EBCDIC as E
 
-import Debug.Trace
+import Debug.Trace.Disable
 
 -- COBOL Interpreter Environment
 
@@ -235,7 +235,7 @@ count f = length . filter f
 runProcDiv :: S.ProcDiv -> CI ()
 runProcDiv proc_div = do 
   mapM_ loadPara proc_div
-  mapM_ runPara proc_div
+  mapMWhile_ runPara proc_div
 
 loadPara :: S.Para -> CI T.Text
 loadPara para@(S.Para mname _) = do 
@@ -418,9 +418,11 @@ valueText (DecVal v) = pure $ showT v
 valueText (GroupVal cnames) = 
   T.concat <$> traverse (getVarData >=> dataText) cnames
 
+mapMWhile_ :: (a -> CI Bool) -> [a] -> CI ()
+mapMWhile_ f xs = () <$ mapMWhile f xs
 
 mapMWhile :: (a -> CI Bool) -> [a] -> CI Bool
 mapMWhile _ [] = pure True
 mapMWhile f (x:xs) = do 
   res <- f x
-  if res then mapMWhile f xs else pure False
+  if trace ("TRACE res: " ++ show res) res then mapMWhile f xs else pure False

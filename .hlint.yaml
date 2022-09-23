@@ -65,6 +65,9 @@
 # Sometimes use snake case for top-level values
 - ignore: {name: Use camelCase}
 
+# Have to import from Data.Functor. Boo.
+- ignore: {name: Use void}
+
 
 # Define some custom infix operators
 # - fixity: infixr 3 ~^#^~
