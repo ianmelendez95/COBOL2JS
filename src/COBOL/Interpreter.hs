@@ -328,7 +328,7 @@ readData h _ (GroupData child_names)  = do
 performUntil :: S.Cond -> [S.Statement] -> CI Bool
 performUntil cond sts = do 
   cond_res <- runCond cond
-  if not cond_res
+  if cond_res
     then pure True
     else do 
       run_res <- runSentence sts
