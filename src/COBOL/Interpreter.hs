@@ -258,6 +258,7 @@ runStatement (S.Display svalues) = do
   lift $ mapM_ TIO.putStr txts >> putChar '\n'
   pure True
 runStatement (S.Open mode name) = runOpenFd mode name >> pure True
+runStatement (S.Close name)     = runCloseFd name     >> pure True
 runStatement (S.Read fd_name on_eof) = runReadFd fd_name on_eof
 runStatement (S.Perform name) = do 
   mpara <- uses envParas (Map.lookup name)
@@ -281,6 +282,15 @@ runOpenFd mode fd_name = do
       case mode of 
         S.Input  -> ReadMode
         S.Output -> WriteMode
+
+runCloseFd :: T.Text -> CI ()
+runCloseFd fd_name = do 
+  fd <- getFd fd_name
+  case fd of 
+    (Fd _ Nothing) -> error $ "CLOSE: FD is not open: " ++ show fd_name
+    (Fd fname (Just handle)) -> do 
+      lift $ hClose handle
+      envFds %= Map.insert fd_name (Fd fname Nothing)
 
 runReadFd :: T.Text -> Maybe [S.Statement] -> CI Bool
 runReadFd fd_name msts = do 
