@@ -262,9 +262,9 @@ runSentence = mapMWhile runStatement
 
 runStatement :: S.Statement -> CI Bool
 runStatement S.GoBack = pure False  -- TODO - should actually end the program (https://www.ibm.com/docs/en/i/7.3?topic=statements-goback-statement)
-runStatement (S.Move val var) = do
-  val' <- evalValue val
-  envVars %= either (insertValue var) (insertData var) val'
+runStatement (S.Move sval var) = do
+  val <- evalValue sval
+  envVars %= insertValue var (either id dataValue val)
   pure True
 runStatement (S.Compute var arith) = do
   arith_val <- runArith arith
@@ -408,39 +408,51 @@ evalValue (S.VarVal var) = do
   pure . Right $ fromMaybe (error $ "Undefined variable: " ++ show var) mdata
 
 dataText :: Data -> CI T.Text
-dataText (StrData _ l v)     = pure $ rightPad l v
+dataText (StrData _ l v)     = pure $ rightPadT l v
 dataText (DecData fmt _ _ v) = pure $ decText fmt v
 dataText (GroupData cnames) = 
   T.concat <$> traverse (getVarData >=> dataText) cnames
 
-rightPad :: Int -> T.Text -> T.Text
-rightPad n txt 
+rightPadT :: Int -> T.Text -> T.Text
+rightPadT n txt 
   | n > len   = txt <> T.replicate (n - len) " " 
   | otherwise = txt
   where 
     len = T.length txt
+
+rightPadWith :: a -> Int -> [a] -> [a]
+rightPadWith x n xs 
+  | n > len = xs ++ replicate (n - len) x
+  | otherwise = xs
+  where 
+    len = length xs
 
 decText :: [S.RFmtChar] -> Double -> T.Text
 decText chars val = 
   let (whole_cs, part_cs') = break isDecPt chars 
       part_cs = drop 1 part_cs'
 
-      (digits, pt_pos)    = floatToDigits 10 (abs val)
-      (whole_ds, part_ds) = splitAt pt_pos digits
+      (whole_ds, part_ds) = toDigits val
 
       sign_txt  = if val < 0 then "-" else ""
       whole_txt = T.reverse $ renderDigits (reverse whole_cs) (reverse whole_ds)
       part_txt  = if null part_cs then "" else "." <> renderDigits part_cs (part_ds ++ repeat 0)
    in sign_txt <> whole_txt <> part_txt
   where 
+    -- Positive double to whole and part digits
+    toDigits :: Double -> ([Int], [Int])
+    toDigits n = 
+      let (digits, e) = floatToDigits 10 (abs n)
+       in if e <= length digits 
+            then let (w, p) = splitAt e digits in (w, drop 1 p)
+            else (rightPadWith 0 e digits, [])
+
     renderDigits :: [S.RFmtChar] -> [Int] -> T.Text
     renderDigits [] _ = ""  -- TODO this will truncate numbers that are too big (maybe it's ok? call it 'undefined behavior')
-    renderDigits (c:cs) [] = 
-      case c of 
-        S.RFComma    -> renderDigits cs []
-        S.RFCurrency -> "$"
-        S.RFNum      -> " "
-        _ -> error $ "Cannot render chars, no more digits: " ++ show (c:cs)
+    renderDigits (c:cs) []
+      | isCurrencySym c = "$" <> T.replicate (length cs) " " 
+      | S.RFNum == c    = T.replicate (length (c:cs)) " "
+      | otherwise = error $ "Cannot render chars, no more digits: " ++ show (c:cs)
     renderDigits (c:cs) (d:ds) 
       | isNumericDigit c = showT d <> renderDigits cs ds
       | S.RFComma == c   = ','     `T.cons` renderDigits cs (d:ds)
@@ -450,6 +462,11 @@ decText chars val =
     isDecPt S.RFDec    = True
     isDecPt S.RFDecPer = True
     isDecPt _ = False
+
+    isCurrencySym :: S.RFmtChar -> Bool 
+    isCurrencySym S.RFCurrency = True
+    isCurrencySym S.RFComma = True
+    isCurrencySym _ = False
 
     isNumericDigit :: S.RFmtChar -> Bool
     isNumericDigit S.RFNum      = True
