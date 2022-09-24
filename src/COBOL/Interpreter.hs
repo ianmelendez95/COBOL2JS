@@ -27,6 +27,8 @@ import Data.Text.Util
 import qualified COBOL.Syntax as S
 import qualified COBOL.EBCDIC as E
 
+import Numeric
+
 import Debug.Trace
 
 -- COBOL Interpreter Environment
@@ -58,8 +60,8 @@ data Value = StrVal T.Text
            | GroupVal [T.Text]
            deriving Show
 
-data Data = StrData Int     T.Text -- length              value
-          | DecData Int Int Double -- digits whole-digits value
+data Data = StrData [S.RFmtChar] Int     T.Text -- length              value
+          | DecData [S.RFmtChar] Int Int Double -- digits whole-digits value
           | GroupData [T.Text]     -- children
           deriving Show
 
@@ -83,13 +85,13 @@ insertData :: T.Text -> Data -> VarMap -> VarMap
 insertData = Map.insert
 
 dataValue :: Data -> Value
-dataValue (StrData _ v)   = StrVal v
-dataValue (DecData _ _ v) = DecVal v
+dataValue (StrData _ _ v)   = StrVal v
+dataValue (DecData _ _ _ v) = DecVal v
 dataValue (GroupData v)   = GroupVal v
 
 setValue :: Value -> Data -> Data
-setValue (StrVal v) (StrData l _)   = StrData l v
-setValue (DecVal n) (DecData d w _) = DecData d w n
+setValue (StrVal v) (StrData f l _)   = StrData f l v
+setValue (DecVal n) (DecData f d w _) = DecData f d w n
 setValue v d = error $ "Incompatible types, cannot set (" ++ show d ++ ") to (" ++ show v ++ ")"
 
 getFd :: T.Text -> CI Fd
@@ -197,7 +199,7 @@ initStorageRecord (S.RElem  _ name fmt msval) = do
 -- TODO improve format checking - check for invalid combinations
 formatToData :: S.RFmt -> Data
 formatToData (S.RFmt chars S.RDisplay) 
-  | S.RFAlphaNum `elem` chars = StrData (count isDisplayChar chars) ""
+  | S.RFAlphaNum `elem` chars = StrData chars (count isDisplayChar chars) ""
   | otherwise                 = fmtCharsToDecData chars
   where 
     isDisplayChar :: S.RFmtChar -> Bool
@@ -213,7 +215,8 @@ formatToData (S.RFmt chars S.RComp3) = fmtCharsToDecData chars
 -- http://www.3480-3590-data-conversion.com/article-packed-fields.html
 fmtCharsToDecData :: [S.RFmtChar] -> Data
 fmtCharsToDecData chars = 
-  DecData (halfRoundUp $ count isDigitChar chars) 
+  DecData chars
+          (halfRoundUp $ count isDigitChar chars) 
           (count isDigitChar (takeWhile (not . isDecimalChar) chars))
           0.0
   where 
@@ -282,7 +285,6 @@ runStatement (S.Perform name) = do
     Nothing -> error $ "PERFORM - no paragraph with name: " ++ show name
     Just para -> runPara para
 runStatement (S.PerformUntil cond sts) = performUntil cond sts
-runStatement s = error $ "statement unsupported: " ++ show s
 
 runOpenFd :: S.IOMode -> T.Text -> CI ()
 runOpenFd mode fd_name = do 
@@ -327,12 +329,12 @@ runReadFd fd_name msts = do
         else pure True
 
 readData :: Handle -> T.Text -> Data -> CI ()
-readData h vname (StrData n _)   = do 
+readData h vname (StrData cs n _)   = do 
   txt <- lift $ E.readText h n
-  envVars %= Map.insert vname (StrData n txt)
-readData h vname (DecData d w _) = do
+  envVars %= Map.insert vname (StrData cs n txt)
+readData h vname (DecData cs d w _) = do
   dec <- lift $ E.readComp3 h d w
-  envVars %= Map.insert vname (DecData d w dec)
+  envVars %= Map.insert vname (DecData cs d w dec)
 readData h _ (GroupData child_names)  = do
   mapM_ byName child_names
   where 
@@ -344,6 +346,10 @@ readData h _ (GroupData child_names)  = do
 runWrite :: T.Text -> CI ()
 runWrite var_name = do 
   (Fd _ (Just handle)) <- getFdByVarName var_name
+  -- vdata <- getVarData var_name
+  -- acct_limit <- getVarData "ACCT-LIMIT-O"
+  -- traceM ("PRINTING: " ++ show vdata)
+  -- traceM ("ACCT-LIMIT: " ++ show acct_limit)
   txt <- getVarData var_name >>= dataText
   lift $ TIO.hPutStrLn handle txt
 
@@ -402,8 +408,8 @@ evalValue (S.VarVal var) = do
   pure . Right $ fromMaybe (error $ "Undefined variable: " ++ show var) mdata
 
 dataText :: Data -> CI T.Text
-dataText (StrData l v)   = pure $ rightPad l v
-dataText (DecData _ _ v) = pure $ showT v
+dataText (StrData _ l v)     = pure $ rightPad l v
+dataText (DecData fmt _ _ v) = pure $ decText fmt v
 dataText (GroupData cnames) = 
   T.concat <$> traverse (getVarData >=> dataText) cnames
 
@@ -413,6 +419,42 @@ rightPad n txt
   | otherwise = txt
   where 
     len = T.length txt
+
+decText :: [S.RFmtChar] -> Double -> T.Text
+decText chars val = 
+  let (whole_cs, part_cs') = break isDecPt chars 
+      part_cs = drop 1 part_cs'
+
+      (digits, pt_pos)    = floatToDigits 10 (abs val)
+      (whole_ds, part_ds) = splitAt pt_pos digits
+
+      sign_txt  = if val < 0 then "-" else ""
+      whole_txt = T.reverse $ renderDigits (reverse whole_cs) (reverse whole_ds)
+      part_txt  = if null part_cs then "" else "." <> renderDigits part_cs (part_ds ++ repeat 0)
+   in sign_txt <> whole_txt <> part_txt
+  where 
+    renderDigits :: [S.RFmtChar] -> [Int] -> T.Text
+    renderDigits [] _ = ""  -- TODO this will truncate numbers that are too big (maybe it's ok? call it 'undefined behavior')
+    renderDigits (c:cs) [] = 
+      case c of 
+        S.RFComma    -> renderDigits cs []
+        S.RFCurrency -> "$"
+        S.RFNum      -> " "
+        _ -> error $ "Cannot render chars, no more digits: " ++ show (c:cs)
+    renderDigits (c:cs) (d:ds) 
+      | isNumericDigit c = showT d <> renderDigits cs ds
+      | S.RFComma == c   = ','     `T.cons` renderDigits cs (d:ds)
+      | otherwise        = error $ "Cannot render digit as format char: " ++ show c
+
+    isDecPt :: S.RFmtChar -> Bool
+    isDecPt S.RFDec    = True
+    isDecPt S.RFDecPer = True
+    isDecPt _ = False
+
+    isNumericDigit :: S.RFmtChar -> Bool
+    isNumericDigit S.RFNum      = True
+    isNumericDigit S.RFCurrency = True
+    isNumericDigit _ = False
 
 valueText :: Value -> CI T.Text
 valueText (StrVal v) = pure v
