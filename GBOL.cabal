@@ -30,7 +30,6 @@ library
       COBOL.Keyword
       COBOL.Syntax
       Data.Text.Util
-      Debug.Trace.Util
       Generic.GReadEnum
       Generic.GShowEnum
       Lib
