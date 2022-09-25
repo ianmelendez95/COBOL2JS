@@ -406,9 +406,7 @@ evalCValueToValue v = either id dataValue <$> evalValue v
 evalValue :: S.Value -> CI (Either Value Data)
 evalValue (S.StrVal str) = pure . Left $ StrVal str
 evalValue (S.NumVal num) = pure . Left $ DecVal num
-evalValue (S.VarVal var) = do 
-  mdata <- uses envVars (Map.lookup var)
-  pure . Right $ fromMaybe (error $ "Undefined variable: " ++ show var) mdata
+evalValue (S.VarVal var) = Right <$> getVarData var
 evalValue (S.FunCall fname) = 
   case fname of 
     "CURRENT-DATE" -> Left . StrVal <$> getCurrentDate
