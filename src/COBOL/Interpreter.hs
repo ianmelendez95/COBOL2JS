@@ -29,6 +29,9 @@ import qualified COBOL.EBCDIC as E
 
 import Numeric
 
+import Data.Time
+import Data.Time.LocalTime
+
 import Debug.Trace
 
 -- COBOL Interpreter Environment
@@ -406,6 +409,21 @@ evalValue (S.NumVal num) = pure . Left $ DecVal num
 evalValue (S.VarVal var) = do 
   mdata <- uses envVars (Map.lookup var)
   pure . Right $ fromMaybe (error $ "Undefined variable: " ++ show var) mdata
+evalValue (S.FunCall fname) = 
+  case fname of 
+    "CURRENT-DATE" -> Left . StrVal <$> getCurrentDate
+    _ -> error $ "Unknown function: " ++ show fname
+
+-- Return the current date formatted to the COBOL standard format.
+-- see: https://www.ibm.com/docs/en/cobol-zos/6.4?topic=functions-current-date
+-- COBOL FMT: %Y%m%d%H%M%S00%z (the zeros should be hundredths of a second, but not implemented)
+getCurrentDate :: CI T.Text
+getCurrentDate = do 
+  now <- lift getZonedTime
+  let date_str = formatTime defaultTimeLocale "%Y%m%d%H%M%S00%z" now
+  traceM ("DATETIME: " ++ date_str)
+  traceM ("DATETIME LENGTH: " ++ show (length date_str) ++ "/21")
+  pure . T.pack $ date_str
 
 dataText :: Data -> CI T.Text
 dataText (StrData _ l v)     = pure $ rightPadT l v

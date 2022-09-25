@@ -46,6 +46,7 @@ library:
   - file-embed
   - mtl
   - bimap
+  - time
 
 executables:
   gbol:
