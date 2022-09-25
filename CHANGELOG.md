@@ -1,4 +1,4 @@
-# Changelog for `COBOL2JS`
+# Changelog for `GBOL`
 
 All notable changes to this project will be documented in this file.
 
