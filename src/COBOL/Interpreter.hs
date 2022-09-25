@@ -278,7 +278,7 @@ runStatement (S.Display svalues) = do
 runStatement (S.Open mode name) = runOpenFd mode name >> pure True
 runStatement (S.Close name)     = runCloseFd name     >> pure True
 runStatement (S.Read fd_name on_eof) = runReadFd fd_name on_eof
-runStatement (S.Write var mfrom) = runWrite var mfrom >> pure True
+runStatement (S.Write var mfrom madv) = runWrite var mfrom madv >> pure True
 runStatement (S.Perform name) = do 
   mpara <- uses envParas (Map.lookup name)
   case mpara of 
@@ -343,15 +343,15 @@ readData h _ (GroupData child_names)  = do
       vdata <- getVarData vname
       readData h vname vdata
 
-runWrite :: T.Text -> Maybe T.Text -> CI ()
-runWrite var_name mfrom_var = do 
+runWrite :: T.Text -> Maybe T.Text -> Maybe Int -> CI ()
+runWrite var_name mfrom_var madv = do 
   (Fd _ (Just handle)) <- getFdByVarName var_name
-  -- vdata <- getVarData var_name
-  -- acct_limit <- getVarData "ACCT-LIMIT-O"
-  -- traceM ("PRINTING: " ++ show vdata)
-  -- traceM ("ACCT-LIMIT: " ++ show acct_limit)
+  sequence_ $ advanceLines handle <$> madv  -- handle AFTER ADVANCE LINES clause
   txt <- getVarData (fromMaybe var_name mfrom_var) >>= dataText
   lift $ TIO.hPutStrLn handle txt
+  where 
+    advanceLines :: Handle -> Int -> CI ()
+    advanceLines h n = lift $ TIO.hPutStr h (T.replicate n "\n")
 
 performUntil :: S.Cond -> [S.Statement] -> CI Bool
 performUntil cond sts = do 
