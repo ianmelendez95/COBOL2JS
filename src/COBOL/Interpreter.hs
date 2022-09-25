@@ -415,10 +415,7 @@ evalValue (S.FunCall fname) =
 getCurrentDate :: CI T.Text
 getCurrentDate = do 
   now <- lift getZonedTime
-  let date_str = formatTime defaultTimeLocale "%Y%m%d%H%M%S00%z" now
-  traceM ("DATETIME: " ++ date_str)
-  traceM ("DATETIME LENGTH: " ++ show (length date_str) ++ "/21")
-  pure . T.pack $ date_str
+  pure . T.pack $ formatTime defaultTimeLocale "%Y%m%d%H%M%S00%z" now
 
 dataText :: Data -> CI T.Text
 dataText (StrData _ l v)     = pure $ rightPadT l v
