@@ -84,9 +84,6 @@ insertValue k v = Map.alter alterVal k
     alterVal Nothing      = error $ "Undefined variable: " ++ show k
     alterVal (Just vdata) = Just $ setValue v vdata
 
-insertData :: T.Text -> Data -> VarMap -> VarMap
-insertData = Map.insert
-
 dataValue :: Data -> Value
 dataValue (StrData _ _ v)   = StrVal v
 dataValue (DecData _ _ _ v) = DecVal v
