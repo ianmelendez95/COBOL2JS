@@ -131,7 +131,7 @@ data Statement = Display [Value]
                | Open IOMode T.Text
                | Close T.Text
                | Read T.Text (Maybe [Statement])
-               | Write T.Text
+               | Write T.Text (Maybe T.Text)
                | Perform T.Text
                | PerformUntil Cond [Statement]
                | GoBack
@@ -402,6 +402,7 @@ readStatement = Read <$> (keyword KRead >> identifier)
 
 writeStatement :: Parser Statement 
 writeStatement = Write <$> (keyword KWrite >> identifier)
+                       <*> optional (keyword KFrom >> identifier)
 
 performStatement :: Parser Statement
 performStatement = do
