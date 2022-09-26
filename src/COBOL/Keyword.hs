@@ -36,6 +36,7 @@ data Keyword = KDivision
              | KComp3
              | KValue
              | KSpace
+             | KSpaces
              | KZero
              | KProcedure
              | KSection 
