@@ -1,9 +1,12 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE BangPatterns #-}
 
 module COBOL.Interpreter
   ( interpretFile 
+
+  , _test_report
   ) where 
 
 import Control.Lens hiding (para)
@@ -11,15 +14,14 @@ import Control.Lens hiding (para)
 import System.IO
     ( hClose, hIsEOF, openFile, Handle, IOMode(WriteMode, ReadMode) )
 
-import Control.Monad.State.Lazy
-    ( (>=>), zipWithM, StateT, MonadTrans(lift), evalStateT )
+import Control.Monad.State.Strict
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
 
 import Data.Maybe
 
-import Data.Map (Map)
-import qualified Data.Map as Map
+import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
 import Data.Bimap (Bimap)
 import qualified Data.Bimap as Bimap
 
@@ -27,7 +29,7 @@ import Data.Text.Util
 import qualified COBOL.Syntax as S
 import qualified COBOL.EBCDIC as E
 
-import Numeric
+import Numeric hiding (readDec)
 
 import Data.Time
 import Data.Time.LocalTime
@@ -64,7 +66,7 @@ data Value = StrVal T.Text
            deriving Show
 
 data Data = StrData [S.RFmtChar] Int     T.Text -- length              value
-          | DecData [S.RFmtChar] Int Int Double -- digits whole-digits value
+          | DecData [S.RFmtChar] Int Int Double -- bin-length whole-digits value
           | GroupData [T.Text]     -- children
           deriving Show
 
@@ -72,27 +74,55 @@ data Fd = Fd FilePath (Maybe Handle)  -- filename fd-handle
 
 type FileAssoc = [(String, FilePath)]
 
+type StrValReader = StateT T.Text CI
+
+svrTake :: Int -> StrValReader T.Text
+svrTake n = do 
+  result <- state (T.splitAt n)
+  if T.length result < n
+    then error "Insufficient text for reading"
+    else pure result
+
 bimapConcat :: (Ord a, Ord b) => Bimap a b -> Bimap a b -> Bimap a b
 bimapConcat m1 m2 = Bimap.fromList (Bimap.toList m1 <> Bimap.toList m2)
 
 makeLenses ''CIEnv
 
-insertValue :: T.Text -> Value -> VarMap -> VarMap
-insertValue k v = Map.alter alterVal k
+insertValue :: T.Text -> Value -> CI ()
+insertValue k (StrVal v) = evalStateT (insertStringValue k) v
+insertValue k src@(DecVal v) = do 
+  d <- getVarData k
+  case d of 
+    (DecData f l w _) -> 
+      envVars %= Map.insert k (DecData f l w v)
+    _ -> error $ "Cannot move (" ++ show src ++ ") into (" ++ show d ++ ")"
+insertValue k src@(GroupVal _) = 
+  error $ "No support for moving group data (" ++ show src ++ ") into (" ++ show k ++ ")"
+
+-- | returns the rest of the unparsed string
+-- TODO throw errors for insufficient string lengths
+insertStringValue :: T.Text -> StrValReader ()
+insertStringValue vname = do 
+  d <- lift $ getVarData vname 
+  case d of 
+    (StrData f l _)   -> do 
+      result <- StrData f l <$> svrTake l
+      lift (envVars %= Map.insert vname result)
+    (DecData f l w _) -> do
+      result <- DecData f l w <$> readDec f
+      lift (envVars %= Map.insert vname result)
+    (GroupData cs) -> mapM_ insertStringValue cs
   where 
-    alterVal :: Maybe Data -> Maybe Data
-    alterVal Nothing      = error $ "Undefined variable: " ++ show k
-    alterVal (Just vdata) = Just $ setValue v vdata
+    readDec :: [S.RFmtChar] -> StrValReader Double
+    readDec fcs
+      | not (all (== S.RFNum) fcs) = 
+          error $ "Only support moving alphanum to simple integers - got: " ++ show fcs
+      | otherwise = readT <$> svrTake (length fcs)
 
 dataValue :: Data -> Value
 dataValue (StrData _ _ v)   = StrVal v
 dataValue (DecData _ _ _ v) = DecVal v
 dataValue (GroupData v)   = GroupVal v
-
-setValue :: Value -> Data -> Data
-setValue (StrVal v) (StrData f l _)   = StrData f l v
-setValue (DecVal n) (DecData f d w _) = DecData f d w n
-setValue v d = error $ "Incompatible types, cannot set (" ++ show d ++ ") to (" ++ show v ++ ")"
 
 getFd :: T.Text -> CI Fd
 getFd fd_name = 
@@ -186,6 +216,11 @@ initStorageRecord (S.RElem  _ name fmt msval) = do
   where 
     initial_data :: CI Data
     initial_data = maybe fmt_data (`setValue` fmt_data) <$> mval
+
+    setValue :: Value -> Data -> Data
+    setValue (StrVal v) (StrData f l _)   = StrData f l (T.take l v)
+    setValue (DecVal n) (DecData f d w _) = DecData f d w n
+    setValue v d = error $ "Incompatible initial value, cannot set (" ++ show d ++ ") to (" ++ show v ++ ")"
     
     fmt_data :: Data
     fmt_data = formatToData fmt
@@ -258,17 +293,17 @@ runPara :: S.Para -> CI Bool
 runPara (S.Para _ sents) = mapMWhile runSentence sents
 
 runSentence :: S.Sentence -> CI Bool
-runSentence = mapMWhile runStatement
+runSentence = mapMWhile (\s -> traceM ("STATEMENT: " ++ show s) >> runStatement s)
 
 runStatement :: S.Statement -> CI Bool
 runStatement S.GoBack = pure False  -- TODO - should actually end the program (https://www.ibm.com/docs/en/i/7.3?topic=statements-goback-statement)
 runStatement (S.Move sval var) = do
   val <- evalValue sval
-  envVars %= insertValue var (either id dataValue val)
+  insertValue var (either id dataValue val)
   pure True
 runStatement (S.Compute var arith) = do
   arith_val <- runArith arith
-  envVars %= insertValue var arith_val
+  insertValue var arith_val
   pure True
 runStatement (S.Display svalues) = do
   data_vals <- traverse evalValue svalues
@@ -497,3 +532,11 @@ mapMWhile _ [] = pure True
 mapMWhile f (x:xs) = do 
   res <- f x
   if res then mapMWhile f xs else pure False
+
+_test_report :: IO ()
+_test_report = 
+  interpretFile 
+    [ ( "PRTLINE", "examples/report/prtline" )
+    , ("ACCTREC", "examples/report/data")
+    ] 
+    "examples/report/REPORT.CBL"

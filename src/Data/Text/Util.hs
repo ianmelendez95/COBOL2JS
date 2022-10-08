@@ -1,5 +1,6 @@
 module Data.Text.Util
   ( showT
+  , readT
   , failT 
   , lowerFirst
   , kebab2camel
@@ -12,6 +13,9 @@ import Data.Char
 
 showT :: Show a => a -> T.Text
 showT = T.pack . show
+
+readT :: Read a => T.Text -> a
+readT = read . T.unpack
 
 failT :: MonadFail m => T.Text -> m a
 failT = fail . T.unpack

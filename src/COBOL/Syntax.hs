@@ -426,7 +426,7 @@ value = choice
   , NumVal     <$> decimal
   , VarVal     <$> identifier
   , NumVal 0   <$  keyword KZero
-  , StrVal " " <$  keyword KSpace
+  , StrVal " " <$  (keyword KSpace <|> keyword KSpaces)
   , FunCall    <$> (keyword KFunction >> identifier) 
   ]
 
